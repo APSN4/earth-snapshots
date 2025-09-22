@@ -1,6 +1,11 @@
 var imports = require('users/dreamsresults/test_uni:objects');
 var places = imports.places;
-print(places);
+
+print('🔍 Загружено мест:', Object.keys(places).length);
+
+// Текущий список мест (может быть дополнен пользователем)
+var currentPlaces = places;
+
 Map.setControlVisibility(false);
 var panel = ui.Panel({style: {position: 'top-left'}});
 Map.add(panel);
@@ -19,18 +24,53 @@ var current_main_panel = null;
 var current_inspector = null;
 
 var select = ui.Select({
-    items: Object.keys(places),
-    onChange: function(key) {
+    items: Object.keys(currentPlaces),
+    onChange: function(selectedName) {
+        if (!selectedName) return;
+        
         Map.layers().reset();
-        var imya = key;
-        var uch = places[imya];
+        print('🎯 Выбрано место:', selectedName);
+        
+        var uch = currentPlaces[selectedName];
         var roi = uch.geometry().buffer(2000).bounds();
-        q = {uch:uch, roi:roi, imya:imya};
-        Map.centerObject(roi);
-        Map.addLayer(ee.Image().byte().paint({featureCollection:roi, width:2}), {palette: ['red']}, 'Буфер');
-        Map.addLayer(ee.Image().byte().paint({featureCollection:uch, width:2}), {palette: ['black']}, key);
+        
+        q = {uch: uch, roi: roi, imya: selectedName};
+        
+        Map.centerObject(uch);
+        Map.addLayer(ee.Image().byte().paint({featureCollection: roi, width: 2}), {palette: ['red']}, 'Буфер');
+        Map.addLayer(ee.Image().byte().paint({featureCollection: uch, width: 2}), {palette: ['black']}, selectedName);
     }});
 
+// Функция для добавления нового объекта
+function addNewObject() {
+    var namePrompt = prompt('Введите название нового объекта:', 'Новое место');
+    if (!namePrompt) return;
+    
+    var codePrompt = prompt('Вставьте код геометрии из objects.js:', 'ee.Geometry.Point([0,0])');
+    if (!codePrompt) return;
+    
+    try {
+        // Выполняем код геометрии
+        var geometry = eval(codePrompt);
+        var featureCollection = ee.FeatureCollection([ee.Feature(geometry)]);
+        
+        // Добавляем в список
+        currentPlaces[namePrompt] = featureCollection;
+        
+        // Обновляем select
+        select.items().reset(Object.keys(currentPlaces));
+        
+        print('✅ Объект "' + namePrompt + '" добавлен!');
+        print('📍 Всего объектов:', Object.keys(currentPlaces).length);
+        
+        // Показываем на карте
+        Map.addLayer(featureCollection, {color: 'green'}, namePrompt);
+        Map.centerObject(featureCollection);
+        
+    } catch (e) {
+        print('❌ Ошибка в коде геометрии:', e.message);
+    }
+}
 
 button.onClick(function()
 {
@@ -345,6 +385,25 @@ var select2 = ui.Select({
 
 select.setPlaceholder('Выберите место...');
 panel.add(select);
+
+// Кнопка для добавления нового объекта
+var addObjectButton = ui.Button({
+    label: '➕ Добавить объект',
+    onClick: function() {
+        addNewObject();
+    },
+    style: {fontWeight: 'bold', color: 'black', backgroundColor: '#4CAF50'}
+});
+panel.add(addObjectButton);
+
+// Показываем инструкцию
+print('📍 Простая инструкция:');
+print('1. Нарисуйте область в objects.js');  
+print('2. Скопируйте код из popup');
+print('3. Нажмите "➕ Добавить объект" здесь');
+print('4. Вставьте код - объект добавится в список!');
+print('');
+print('💡 Текущих мест:', Object.keys(currentPlaces).length);
 
 panel.add(panel_date);
 panel.add(button);
