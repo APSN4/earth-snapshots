@@ -116,6 +116,58 @@ drawingTools.onDraw(function(geometry) {
 // Текущий список мест (может быть дополнен пользователем)
 var currentPlaces = places;
 
+// Функция для создания минимального квадрата, который полностью содержит объект
+function createMinimalBoundingSquare(geometry) {
+    // Используем более простой подход: получаем bounds и работаем с ними
+    var bounds = geometry.bounds();
+    
+    // Получаем координаты bounds правильным способом
+    var coords = bounds.coordinates();
+    var listCoords = ee.List(coords.get(0));
+    
+    var point1 = ee.List(listCoords.get(0)); // [minLon, minLat]
+    var point3 = ee.List(listCoords.get(2)); // [maxLon, maxLat]
+    
+    var minLon = ee.Number(point1.get(0));
+    var minLat = ee.Number(point1.get(1));
+    var maxLon = ee.Number(point3.get(0));
+    var maxLat = ee.Number(point3.get(1));
+    
+    // Вычисляем центр
+    var centerLon = minLon.add(maxLon).divide(2);
+    var centerLat = minLat.add(maxLat).divide(2);
+    
+    // Рассчитываем размеры в метрах для правильного квадрата
+    var widthDegrees = maxLon.subtract(minLon);
+    var heightDegrees = maxLat.subtract(minLat);
+    
+    // Преобразуем в метры (точные значения):
+    // 1 градус широты = 111319.9 метров (точное значение)
+    // 1 градус долготы = 111319.9 * cos(широта) метров
+    var METERS_PER_DEGREE = 111319.9; // точное значение для WGS84
+    
+    var avgLat = centerLat.multiply(Math.PI).divide(180); // в радианах
+    var cosLat = avgLat.cos();
+    
+    var widthMeters = widthDegrees.multiply(METERS_PER_DEGREE).multiply(cosLat);
+    var heightMeters = heightDegrees.multiply(METERS_PER_DEGREE);
+    
+    // Берем максимальную сторону в метрах
+    var maxSideMeters = widthMeters.max(heightMeters);
+    
+    // Преобразуем обратно в градусы для создания квадрата
+    var halfSideLon = maxSideMeters.divide(2).divide(METERS_PER_DEGREE).divide(cosLat);
+    var halfSideLat = maxSideMeters.divide(2).divide(METERS_PER_DEGREE);
+    
+    // Создаем правильный квадрат
+    return ee.Geometry.Rectangle([
+        centerLon.subtract(halfSideLon),
+        centerLat.subtract(halfSideLat),
+        centerLon.add(halfSideLon),
+        centerLat.add(halfSideLat)
+    ]);
+}
+
 // Map.setControlVisibility(false);
 var panel = ui.Panel({style: {position: 'top-left'}});
 Map.add(panel);
@@ -142,12 +194,14 @@ var select = ui.Select({
         print('🎯 Выбрано место:', selectedName);
 
         var uch = currentPlaces[selectedName];
-        var roi = uch.geometry().buffer(2000).bounds();
+        var roi = createMinimalBoundingSquare(uch.geometry());
+        var roiCollection = ee.FeatureCollection([ee.Feature(roi)]);
+        var roiBounds = roi.bounds(); // Простая геометрия для clip()
 
-        q = {uch: uch, roi: roi, imya: selectedName};
+        q = {uch: uch, roi: roi, roiCollection: roiCollection, roiBounds: roiBounds, imya: selectedName};
 
         Map.centerObject(uch);
-        Map.addLayer(ee.Image().byte().paint({featureCollection: roi, width: 2}), {palette: ['red']}, 'Буфер');
+        Map.addLayer(ee.Image().byte().paint({featureCollection: roiCollection, width: 2}), {palette: ['red']}, 'Буфер');
         Map.addLayer(ee.Image().byte().paint({featureCollection: uch, width: 2}), {palette: ['black']}, selectedName);
     }});
 
@@ -188,7 +242,8 @@ button.onClick(function()
     var DATE1 = panel_date.widgets().get(1).getValue();
     var DATE2 = panel_date.widgets().get(2).getValue();
     var cloud = Number(panel_date.widgets().get(3).getValue());
-    var ROI = q.roi;
+    var ROI = q.roiBounds; // Простая геометрия для clip()
+    var ROICollection = q.roiCollection;
     // Доля облачного покрытия района интереса.
     function getCloudScore(image) {
         var qa = image.select('QA_PIXEL').rename('cloud');
@@ -244,7 +299,7 @@ button.onClick(function()
     //maxP2= ee.Number(maxP2.get('red')).getInfo();
     //print(q.imya, cloud, DATE1, DATE2, maxP2, coll.toList(coll.size()), coll_LST.toList(coll_LST.size()), coll.aggregate_array('DATE_ACQUIRED').distinct());
     //Map.addLayer(sharpened,{min: 0, max: maxP2*0.6, gamma: 1.4},'Исходный снимок '+DATE1);
-    Map.addLayer(ee.Image().byte().paint({featureCollection:ROI, width:2}), {palette: ['red']}, 'Буфер');
+    Map.addLayer(ee.Image().byte().paint({featureCollection:ROICollection, width:2}), {palette: ['red']}, 'Буфер');
     Map.addLayer(ee.Image().byte().paint({featureCollection:q.uch, width:2}), {palette: ['black']}, q.imya);
 
     q.coll = coll_LST.sort('system:time_start', true)//.aggregate_array('DATE_ACQUIRED').distinct();
@@ -274,9 +329,11 @@ var select2 = ui.Select({
         var name_uchastok = q.imya;
         var folder = 'GEE_exports';
 
-        //Создаётся буфер области интереса, приближаемся к объекту
+        //Создаётся минимальный квадрат области интереса, приближаемся к объекту
         var uchastok = q.uch
-        var ROI = uchastok.geometry().buffer(2000).bounds();
+        var roiSquare = createMinimalBoundingSquare(uchastok.geometry());
+        var ROI = roiSquare.bounds(); // Простая геометрия для clip()
+        var ROICollection = ee.FeatureCollection([ee.Feature(roiSquare)]);
         Map.setOptions('hybrid', {});
         //Map.centerObject(ROI);
 
@@ -337,7 +394,7 @@ var select2 = ui.Select({
         var palette = ['040274', '0502ce', '307ef3', '3be285', 'b5e22e', 'ffb613', 'ff0000', '911003'];
         var visLST = {min: min, max: max, palette: palette};
         //Map.addLayer(LST, visLST, 'Тепловая карта (LST)');
-        //Map.addLayer(ee.Image().byte().paint({featureCollection:ROI, width:2}), {palette: ['red']}, 'Буфер');
+        //Map.addLayer(ee.Image().byte().paint({featureCollection:ROICollection, width:2}), {palette: ['red']}, 'Буфер');
         //Map.addLayer(ee.Image().byte().paint({featureCollection:uchastok, width:2}), {palette: ['black']}, name_uchastok);
 
         //Определение минимального и максимального значений температуры в области интереса
@@ -439,7 +496,7 @@ var select2 = ui.Select({
 
         var layer2020 = ui.Map.Layer(LST, {min: min, max: max, palette: palette}, 'LST');
         var layer2021 = ui.Map.Layer(sharpened,{min: 0, max: maxP2*0.65, gamma: 1.3},'Исходный снимок');
-        var layer2022 = ui.Map.Layer(ee.Image().byte().paint({featureCollection:ROI, width:2}), {palette: ['red']}, 'Буфер');
+        var layer2022 = ui.Map.Layer(ee.Image().byte().paint({featureCollection:ROICollection, width:2}), {palette: ['red']}, 'Буфер');
         var layer2023 = ui.Map.Layer(ee.Image().byte().paint({featureCollection:uchastok, width:2}), {palette: ['black']}, name_uchastok);
 
         Map.add(layer2021);
