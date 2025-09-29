@@ -3,10 +3,120 @@ var places = imports.places;
 
 print('🔍 Загружено мест:', Object.keys(places).length);
 
+
+// === UI ДЛЯ РИСОВАНИЯ ОБЛАСТЕЙ ===
+var drawingTools = Map.drawingTools();
+drawingTools.setShown(true);
+drawingTools.setDrawModes(['polygon', 'point', 'rectangle']);
+
+// Панель управления
+var controlPanel = ui.Panel({
+    widgets: [
+        ui.Label('🎨 Создание новых областей', {fontWeight: 'bold', fontSize: '16px'}),
+        ui.Label('1. Выберите инструмент рисования'),
+        ui.Label('2. Нарисуйте область на карте'),
+        ui.Label('3. Скопируйте код из popup'),
+        ui.Label('4. Вставьте в program.js'),
+    ],
+    style: {position: 'top-right', width: '300px'}
+});
+Map.add(controlPanel);
+
+// Элементы диалога
+var nameInput = ui.Textbox({placeholder: 'Введите название области...', style: {width: '250px'}});
+var codeTextbox = ui.Textbox({
+    placeholder: 'Код геометрии появится здесь...',
+    style: {width: '250px', height: '60px'}
+});
+var copyButton = ui.Button({
+    label: '📋 Скопировать код',
+    style: {backgroundColor: '#4CAF50', color: 'black'}
+});
+var closeButton = ui.Button({
+    label: '❌ Закрыть',
+    style: {backgroundColor: '#f44336', color: 'black'}
+});
+
+var dialogPanel = ui.Panel({
+    widgets: [
+        ui.Label('📝 Данные для копирования:', {fontWeight: 'bold'}),
+        ui.Label('Название области:'),
+        nameInput,
+        ui.Label('Код геометрии:'),
+        codeTextbox,
+        ui.Panel([copyButton, closeButton], ui.Panel.Layout.flow('horizontal'))
+    ],
+    style: {shown: false, backgroundColor: 'white', padding: '15px', border: '2px solid #4CAF50'}
+});
+controlPanel.add(dialogPanel);
+
+var currentGeometry = null;
+
+// Функция для показа диалога с кодом
+function showGeometryCode(geometry, name) {
+    currentGeometry = geometry;
+
+    // Получаем координаты геометрии
+    var coordinates = geometry.coordinates();
+    coordinates.evaluate(function(coords) {
+        var geoType = geometry.type().getInfo();
+        var code;
+
+        // Генерируем код в зависимости от типа геометрии
+        if (geoType === 'Point') {
+            code = "ee.Geometry.Point(" + JSON.stringify(coords) + ")";
+        } else if (geoType === 'Polygon') {
+            code = "ee.Geometry.Polygon(" + JSON.stringify(coords) + ")";
+        } else if (geoType === 'Rectangle') {
+            code = "ee.Geometry.Rectangle(" + JSON.stringify(coords) + ")";
+        } else {
+            code = "ee.Geometry(" + JSON.stringify(coords) + ")";
+        }
+
+        // Показываем в диалоге
+        codeTextbox.setValue(code);
+        nameInput.setValue(name || 'Новая область');
+        dialogPanel.style().set('shown', true);
+
+        print('✅ Область создана! Скопируйте код из диалога');
+        print('📋 Код для вставки:', code);
+    });
+}
+
+// Обработчики кнопок
+copyButton.onClick(function() {
+    var name = nameInput.getValue();
+    var code = codeTextbox.getValue();
+
+    print('📋 Скопируйте эти строки в program.js:');
+    print('// В начале файла добавьте:');
+    print("var " + name.replace(/\s+/g, '_') + " = ee.FeatureCollection([ee.Feature(" + code + ")]);");
+    print('');
+    print('// В объект places добавьте:');
+    print("'" + name + "': " + name.replace(/\s+/g, '_') + ",");
+    print('');
+    print('💡 После добавления нажмите кнопку "Добавить объект" в program.js');
+});
+
+closeButton.onClick(function() {
+    dialogPanel.style().set('shown', false);
+    nameInput.setValue('');
+    codeTextbox.setValue('');
+    drawingTools.clear();
+});
+
+// Обработчик рисования
+drawingTools.onDraw(function(geometry) {
+    print('✏️ Область нарисована! Введите название.');
+    showGeometryCode(geometry, 'Область_' + Date.now());
+});
+
+
+
 // Текущий список мест (может быть дополнен пользователем)
 var currentPlaces = places;
 
-Map.setControlVisibility(false);
+// Map.setControlVisibility(false);
 var panel = ui.Panel({style: {position: 'top-left'}});
 Map.add(panel);
 var intro = ui.Label('Panel', {fontWeight: 'bold', textAlign: 'center', stretch: 'horizontal', fontSize: '24px'});
@@ -27,15 +137,15 @@ var select = ui.Select({
     items: Object.keys(currentPlaces),
     onChange: function(selectedName) {
         if (!selectedName) return;
-        
+
         Map.layers().reset();
         print('🎯 Выбрано место:', selectedName);
-        
+
         var uch = currentPlaces[selectedName];
         var roi = uch.geometry().buffer(2000).bounds();
-        
+
         q = {uch: uch, roi: roi, imya: selectedName};
-        
+
         Map.centerObject(uch);
         Map.addLayer(ee.Image().byte().paint({featureCollection: roi, width: 2}), {palette: ['red']}, 'Буфер');
         Map.addLayer(ee.Image().byte().paint({featureCollection: uch, width: 2}), {palette: ['black']}, selectedName);
@@ -45,28 +155,28 @@ var select = ui.Select({
 function addNewObject() {
     var namePrompt = prompt('Введите название нового объекта:', 'Новое место');
     if (!namePrompt) return;
-    
-    var codePrompt = prompt('Вставьте код геометрии из objects.js:', 'ee.Geometry.Point([0,0])');
+
+    var codePrompt = prompt('Вставьте код геометрии:', 'ee.Geometry.Point([0,0])');
     if (!codePrompt) return;
-    
+
     try {
         // Выполняем код геометрии
         var geometry = eval(codePrompt);
         var featureCollection = ee.FeatureCollection([ee.Feature(geometry)]);
-        
+
         // Добавляем в список
         currentPlaces[namePrompt] = featureCollection;
-        
+
         // Обновляем select
         select.items().reset(Object.keys(currentPlaces));
-        
+
         print('✅ Объект "' + namePrompt + '" добавлен!');
         print('📍 Всего объектов:', Object.keys(currentPlaces).length);
-        
+
         // Показываем на карте
         Map.addLayer(featureCollection, {color: 'green'}, namePrompt);
         Map.centerObject(featureCollection);
-        
+
     } catch (e) {
         print('❌ Ошибка в коде геометрии:', e.message);
     }
@@ -396,13 +506,6 @@ var addObjectButton = ui.Button({
 });
 panel.add(addObjectButton);
 
-// Показываем инструкцию
-print('📍 Простая инструкция:');
-print('1. Нарисуйте область в objects.js');  
-print('2. Скопируйте код из popup');
-print('3. Нажмите "➕ Добавить объект" здесь');
-print('4. Вставьте код - объект добавится в список!');
-print('');
 print('💡 Текущих мест:', Object.keys(currentPlaces).length);
 
 panel.add(panel_date);
