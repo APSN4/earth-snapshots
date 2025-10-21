@@ -442,6 +442,60 @@ var sensorInfo = {
 // #############################################################################
 
 /**
+ * Creates a minimal bounding square that fully contains the geometry.
+ */
+function createMinimalBoundingSquare(geometry) {
+  // Get bounds and work with them
+  var bounds = geometry.bounds();
+  
+  // Get coordinates of bounds
+  var coords = bounds.coordinates();
+  var listCoords = ee.List(coords.get(0));
+  
+  var point1 = ee.List(listCoords.get(0)); // [minLon, minLat]
+  var point3 = ee.List(listCoords.get(2)); // [maxLon, maxLat]
+  
+  var minLon = ee.Number(point1.get(0));
+  var minLat = ee.Number(point1.get(1));
+  var maxLon = ee.Number(point3.get(0));
+  var maxLat = ee.Number(point3.get(1));
+  
+  // Calculate center
+  var centerLon = minLon.add(maxLon).divide(2);
+  var centerLat = minLat.add(maxLat).divide(2);
+  
+  // Calculate dimensions in meters for a proper square
+  var widthDegrees = maxLon.subtract(minLon);
+  var heightDegrees = maxLat.subtract(minLat);
+  
+  // Convert to meters (exact values):
+  // 1 degree of latitude = 111319.9 meters (exact value)
+  // 1 degree of longitude = 111319.9 * cos(latitude) meters
+  var METERS_PER_DEGREE = 111319.9; // exact value for WGS84
+  
+  var avgLat = centerLat.multiply(Math.PI).divide(180); // in radians
+  var cosLat = avgLat.cos();
+  
+  var widthMeters = widthDegrees.multiply(METERS_PER_DEGREE).multiply(cosLat);
+  var heightMeters = heightDegrees.multiply(METERS_PER_DEGREE);
+  
+  // Take the maximum side in meters
+  var maxSideMeters = widthMeters.max(heightMeters);
+  
+  // Convert back to degrees to create a square
+  var halfSideLon = maxSideMeters.divide(2).divide(METERS_PER_DEGREE).divide(cosLat);
+  var halfSideLat = maxSideMeters.divide(2).divide(METERS_PER_DEGREE);
+  
+  // Create a proper square
+  return ee.Geometry.Rectangle([
+    centerLon.subtract(halfSideLon),
+    centerLat.subtract(halfSideLat),
+    centerLon.add(halfSideLon),
+    centerLat.add(halfSideLat)
+  ]);
+}
+
+/**
  * Ccloud masks OLI images.
  */
 function prepOliSr(img) {
@@ -596,19 +650,24 @@ function renderGraphics(coords) {
   var visParams = sensorInfo[sensorSelect.getValue()]['rgb'][rgbSelect.getValue()];
   
   // Determine if using drawn geometry or clicked point
-  var aoiCircle, aoiBox;
+  var aoiCircle, aoiBox, aoiSquare;
   var useDrawnGeometry = (regionMethodSelect.getValue() === 'Графически' && DRAWN_GEOMETRY !== null);
   
   if (useDrawnGeometry) {
     // Use drawn geometry
     var drawnGeom = DRAWN_GEOMETRY;
     aoiCircle = drawnGeom.buffer(sensorInfo[sensor]['aoiRadius']);
-    aoiBox = drawnGeom;
+    // Create minimal bounding square for the drawn geometry
+    aoiSquare = createMinimalBoundingSquare(drawnGeom);
+    aoiBox = aoiSquare; // Use square for image processing
   } else {
     // Get the clicked point and buffer it.
     var point = ee.Geometry.Point(coords);
     aoiCircle = point.buffer(sensorInfo[sensor]['aoiRadius']);
-    aoiBox = point.buffer(regionWidthSlider.getValue()*1000/2);
+    var tempBox = point.buffer(regionWidthSlider.getValue()*1000/2);
+    // Create minimal bounding square for the buffered point
+    aoiSquare = createMinimalBoundingSquare(tempBox);
+    aoiBox = aoiSquare; // Use square for image processing
   }
   
   // Clear previous point from the Map.
@@ -616,9 +675,26 @@ function renderGraphics(coords) {
     map.layers().remove(el);
   });
 
-  // Add new point to the Map.
-  map.addLayer(aoiCircle, {color: AOI_COLOR});
-  map.centerObject(aoiCircle, 14);
+  // Add visualization layers
+  if (useDrawnGeometry) {
+    // In graphical mode: show the drawn geometry
+    var drawnGeomCollection = ee.FeatureCollection([ee.Feature(DRAWN_GEOMETRY)]);
+    map.addLayer(ee.Image().byte().paint({featureCollection: drawnGeomCollection, width: 3}), 
+                 {palette: ['yellow']}, 'Drawn area');
+    // Red square border shows the actual image chip area
+    var aoiSquareCollection = ee.FeatureCollection([ee.Feature(aoiSquare)]);
+    map.addLayer(ee.Image().byte().paint({featureCollection: aoiSquareCollection, width: 2}), 
+                 {palette: ['red']}, 'Image chip area (square)');
+    map.centerObject(aoiSquare, 14);
+  } else {
+    // In click mode: show the point circle
+    map.addLayer(aoiCircle, {color: AOI_COLOR});
+    // Red square border shows the actual image chip area
+    var aoiSquareCollection = ee.FeatureCollection([ee.Feature(aoiSquare)]);
+    map.addLayer(ee.Image().byte().paint({featureCollection: aoiSquareCollection, width: 2}), 
+                 {palette: ['red']}, 'Image chip area (square)');
+    map.centerObject(aoiCircle, 14);
+  }
 
   // Get collection options.
 
@@ -631,15 +707,15 @@ function renderGraphics(coords) {
   // Build the collection.
   var col;
   if(sensor == 'Sentinel-2 SR' | sensor == 'Sentinel-2 TOA') {
-    col = getS2SrCldCol(aoiBox, startDate, endDate, cloudThresh, datasetId);
+    col = getS2SrCldCol(aoiSquare, startDate, endDate, cloudThresh, datasetId);
   } else if(sensor == 'Landsat-8/9 SR' | sensor == 'Landsat-8/9 TOA') {
-    col = getLandsatCollection(aoiBox, startDate, endDate, cloudThresh, datasetId);
+    col = getLandsatCollection(aoiSquare, startDate, endDate, cloudThresh, datasetId);
   }
 
   col = ee.ImageCollection(col.distinct('date')).sort('system:time_start');
 
   // Display the image chip time series. 
-  displayBrowseImg(col, aoiBox, aoiCircle);
+  displayBrowseImg(col, aoiSquare, aoiCircle);
 }
 
 /**
