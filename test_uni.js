@@ -196,6 +196,18 @@ var regionWidthSlider = ui.Slider({
 var regionWidthPanel = ui.Panel(
   [regionWidthLabel, regionWidthSlider], null, {stretch: 'horizontal'});
 
+// Region selection method.
+var regionMethodLabel = ui.Label(
+  {value: 'Способ выбора области', style: headerFont});
+var regionMethodList = ['По клику', 'Графически'];
+var regionMethodSelect = ui.Select({
+  items: regionMethodList, 
+  value: 'По клику', 
+  style: {stretch: 'horizontal'}
+});
+var regionMethodPanel = ui.Panel(
+  [regionMethodLabel, regionMethodSelect], null, {stretch: 'horizontal'});
+
 // A message to wait for image chips to load.
 var waitMsgImgPanel = ui.Label({
   value: '⚙️' + ' Processing, please wait.',
@@ -246,6 +258,53 @@ var AOI_COLOR = 'ffffff';  //'b300b3';
 
 var COORDS = null;
 var CLICKED = false;
+var DRAWN_GEOMETRY = null;
+
+// Drawing tools initialization
+var drawingTools = map.drawingTools();
+drawingTools.setShown(false);
+drawingTools.setDrawModes(['polygon', 'point', 'rectangle']);
+
+// Clear drawing button
+var clearDrawingButton = ui.Button({
+  label: '🗑️ Очистить',
+  onClick: function() {
+    drawingTools.clear();
+    DRAWN_GEOMETRY = null;
+    submitButton.style().set('shown', false);
+    print('Рисунок очищен');
+  },
+  style: {backgroundColor: '#ff6b6b', color: 'white', fontSize: '11px'}
+});
+
+// Drawing tools control panel
+var drawingControlPanel = ui.Panel({
+  widgets: [
+    ui.Label('🎨 Графический выбор области', {fontWeight: 'bold', fontSize: '14px'}),
+    ui.Label('1. Выберите инструмент рисования', {fontSize: '11px'}),
+    ui.Label('2. Нарисуйте область на карте', {fontSize: '11px'}),
+    ui.Label('3. Нажмите "Submit changes"', {fontSize: '11px'}),
+    clearDrawingButton
+  ],
+  style: {
+    position: 'top-left', 
+    width: '220px',
+    shown: false,
+    margin: '10px 0px 0px 0px'
+  }
+});
+
+// Handler for drawing tools
+drawingTools.onDraw(function(geometry) {
+  DRAWN_GEOMETRY = geometry;
+  CLICKED = true;
+  print('✅ Область нарисована! Нажмите "Submit changes" для применения.');
+  submitButton.style().set('shown', true);
+});
+
+drawingTools.onEdit(function(geometry) {
+  DRAWN_GEOMETRY = geometry;
+});
 
 
 
@@ -536,10 +595,21 @@ function renderGraphics(coords) {
   // Get the selected RGB combo vis params.
   var visParams = sensorInfo[sensorSelect.getValue()]['rgb'][rgbSelect.getValue()];
   
-  // Get the clicked point and buffer it.
-  var point = ee.Geometry.Point(coords);
-  var aoiCircle = point.buffer(sensorInfo[sensor]['aoiRadius']);
-  var aoiBox = point.buffer(regionWidthSlider.getValue()*1000/2);
+  // Determine if using drawn geometry or clicked point
+  var aoiCircle, aoiBox;
+  var useDrawnGeometry = (regionMethodSelect.getValue() === 'Графически' && DRAWN_GEOMETRY !== null);
+  
+  if (useDrawnGeometry) {
+    // Use drawn geometry
+    var drawnGeom = DRAWN_GEOMETRY;
+    aoiCircle = drawnGeom.buffer(sensorInfo[sensor]['aoiRadius']);
+    aoiBox = drawnGeom;
+  } else {
+    // Get the clicked point and buffer it.
+    var point = ee.Geometry.Point(coords);
+    aoiCircle = point.buffer(sensorInfo[sensor]['aoiRadius']);
+    aoiBox = point.buffer(regionWidthSlider.getValue()*1000/2);
+  }
   
   // Clear previous point from the Map.
   map.layers().forEach(function(el) {
@@ -588,7 +658,16 @@ function handleMapClick(coords) {
  * Handles submit button click.
  */
 function handleSubmitClick() {
-  renderGraphics(COORDS);
+  if (regionMethodSelect.getValue() === 'Графически' && DRAWN_GEOMETRY !== null) {
+    // Use centroid of drawn geometry as coords for compatibility
+    var centroid = DRAWN_GEOMETRY.centroid().coordinates();
+    centroid.evaluate(function(coords) {
+      COORDS = coords;
+      renderGraphics(COORDS);
+    });
+  } else if (COORDS !== null) {
+    renderGraphics(COORDS);
+  }
   submitButton.style().set('shown', false);
 }
 
@@ -630,10 +709,16 @@ function controlButtonHandler() {
     controlShow = false;
     controlElements.style().set('shown', false);
     controlButton.setLabel('Options ❯');
+    // Hide drawing control panel when Options is hidden
+    drawingControlPanel.style().set('shown', false);
   } else {
     controlShow = true;
     controlElements.style().set('shown', true);
     controlButton.setLabel('Options ❮');
+    // Show drawing control panel if graphical mode is selected
+    if(regionMethodSelect.getValue() === 'Графически') {
+      drawingControlPanel.style().set('shown', true);
+    }
   }
   
   if(infoShow | controlShow) {
@@ -681,12 +766,14 @@ controlElements.add(rgbPanel);
 controlElements.add(durationPanel);
 controlElements.add(cloudPanel);
 controlElements.add(regionWidthPanel);
+controlElements.add(regionMethodPanel);
 controlElements.add(submitButton);
 
 controlPanel.add(instr);
 controlPanel.add(buttonPanel);
 controlPanel.add(infoElements);
 controlPanel.add(controlElements);
+controlPanel.add(drawingControlPanel);
 
 map.add(controlPanel);
 map.add(panel);
@@ -702,6 +789,32 @@ cloudSlider.onChange(optionChange);
 regionWidthSlider.onChange(optionChange);
 submitButton.onClick(handleSubmitClick);
 map.onClick(handleMapClick);
+
+// Handler for region method selection
+regionMethodSelect.onChange(function(method) {
+  if (method === 'Графически') {
+    // Show drawing tools
+    drawingTools.setShown(true);
+    drawingControlPanel.style().set('shown', true);
+    instr.setValue('Draw a region on the map');
+    // Hide chip width slider (not used in graphical mode)
+    regionWidthPanel.style().set('shown', false);
+    // Disable map click handler temporarily
+    map.unlisten('click');
+  } else {
+    // Hide drawing tools
+    drawingTools.setShown(false);
+    drawingControlPanel.style().set('shown', false);
+    drawingTools.clear();
+    DRAWN_GEOMETRY = null;
+    instr.setValue('Click on a location');
+    // Show chip width slider (used in click mode)
+    regionWidthPanel.style().set('shown', true);
+    // Re-enable map click handler
+    map.onClick(handleMapClick);
+  }
+  optionChange();
+});
 
 function zoomDaDa() {
   var lat1 = coordZoom.getValue().split(", ");
