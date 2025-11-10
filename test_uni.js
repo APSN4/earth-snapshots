@@ -604,7 +604,7 @@ function clearImgs() {
 /**
  * Displays image cards to the card panel.
  */
-function displayBrowseImg(col, aoiBox, aoiCircle, requestId) {
+function displayBrowseImg(col, aoiBox, aoiCircle, geometryForBorder, requestId) {
   clearImgs();
   waitMsgImgPanel.style().set('shown', true);
   imgCardPanel.add(waitMsgImgPanel);
@@ -642,13 +642,18 @@ function displayBrowseImg(col, aoiBox, aoiCircle, requestId) {
         .paint(ee.FeatureCollection(ee.Feature(table.geometry())), 1, 2)
         .visualize({palette: 'ff0000'});
       
+      // Yellow border for your AOI (drawn area or clicked point)
+      var yellowBorder = ee.Image().byte()
+        .paint(ee.FeatureCollection(ee.Feature(geometryForBorder)), 1, 3)
+        .visualize({palette: 'ffff00'});
+      
       // Финальная проверка перед созданием thumbnail (самая дорогая операция)
       if (requestId !== CURRENT_REQUEST_ID) {
         return;
       }
       
       var thumbnail = ui.Thumbnail({
-        image: img.visualize(visParams).blend(aoiImg),
+        image: img.visualize(visParams).blend(aoiImg).blend(yellowBorder),
         params: {region: aoiBox, dimensions: '200',  crs: 'EPSG:3857',  format: 'PNG'}});
       
       var button = ui.Button(date);
@@ -754,8 +759,10 @@ function renderGraphics(coords) {
 
   col = ee.ImageCollection(col.distinct('date')).sort('system:time_start');
 
-  // Display the image chip time series. 
-  displayBrowseImg(col, aoiSquare, aoiCircle, currentRequestId);
+  // Display the image chip time series.
+  // Pass the actual drawn geometry for proper display in thumbnails
+  var geometryForBorder = useDrawnGeometry ? DRAWN_GEOMETRY : aoiCircle;
+  displayBrowseImg(col, aoiSquare, aoiCircle, geometryForBorder, currentRequestId);
 }
 
 /**
