@@ -1,6 +1,3 @@
-/**** Start of imports. If edited, may not auto-convert in the playground. ****/
-var table = ee.FeatureCollection("projects/ee-igrek23022001/assets/ROI_test_forEvg");
-/***** End of imports. If edited, may not auto-convert in the playground. *****/
 
 //var rgbTs = require('users/jstnbraaten/modules:rgb-timeseries/rgb-timeseries.js'); 
 
@@ -259,6 +256,7 @@ var AOI_COLOR = 'ffffff';  //'b300b3';
 var COORDS = null;
 var CLICKED = false;
 var DRAWN_GEOMETRY = null;
+var CURRENT_REQUEST_ID = 0; // Счетчик для отслеживания актуального запроса
 
 // Drawing tools initialization
 var drawingTools = map.drawingTools();
@@ -595,7 +593,7 @@ function clearImgs() {
 /**
  * Displays image cards to the card panel.
  */
-function displayBrowseImg(col, aoiBox, aoiCircle) {
+function displayBrowseImg(col, aoiBox, aoiCircle, requestId) {
   clearImgs();
   waitMsgImgPanel.style().set('shown', true);
   imgCardPanel.add(waitMsgImgPanel);
@@ -604,8 +602,25 @@ function displayBrowseImg(col, aoiBox, aoiCircle) {
   var dates = col.aggregate_array('date').sort();
 
   dates.evaluate(function(dates) {
+    // Проверяем, актуален ли еще этот запрос
+    if (requestId !== CURRENT_REQUEST_ID) {
+      print('Предыдущий запрос отменен');
+      return;
+    }
+    
     waitMsgImgPanel.style().set('shown', false);
+    
+    // Проверяем, что dates не null или undefined
+    if (!dates) {
+      print('Ошибка: не удалось получить даты');
+      return;
+    }
+    
     dates.forEach(function(date) {
+      // Еще раз проверяем актуальность внутри цикла
+      if (requestId !== CURRENT_REQUEST_ID) {
+        return;
+      }
       
       var img = col.filter(ee.Filter.eq('date', date)).median();
       
@@ -644,6 +659,10 @@ function displayBrowseImg(col, aoiBox, aoiCircle) {
  * Generates chart and adds image cards to the image panel.
  */
 function renderGraphics(coords) {
+  // Увеличиваем счетчик запросов, чтобы прервать предыдущие
+  CURRENT_REQUEST_ID++;
+  var currentRequestId = CURRENT_REQUEST_ID;
+  
   var sensor = sensorSelect.getValue();
 
   // Get the selected RGB combo vis params.
@@ -652,6 +671,7 @@ function renderGraphics(coords) {
   // Determine if using drawn geometry or clicked point
   var aoiCircle, aoiBox, aoiSquare;
   var useDrawnGeometry = (regionMethodSelect.getValue() === 'Графически' && DRAWN_GEOMETRY !== null);
+  print(useDrawnGeometry)
   
   if (useDrawnGeometry) {
     // Use drawn geometry
@@ -715,7 +735,7 @@ function renderGraphics(coords) {
   col = ee.ImageCollection(col.distinct('date')).sort('system:time_start');
 
   // Display the image chip time series. 
-  displayBrowseImg(col, aoiSquare, aoiCircle);
+  displayBrowseImg(col, aoiSquare, aoiCircle, currentRequestId);
 }
 
 /**
