@@ -307,7 +307,12 @@ var drawingControlPanel = ui.Panel({
 drawingTools.onDraw(function(geometry) {
   DRAWN_GEOMETRY = geometry;
   CLICKED = true;
-  print('✅ Область нарисована! Нажмите "Submit changes" для применения.');
+  var layerCount = drawingTools.layers().length();
+  if (layerCount === 1) {
+    print('✅ Область нарисована! Нажмите "Submit changes" для применения.');
+  } else {
+    print('✅ Нарисовано ' + layerCount + ' областей. Нажмите "Submit changes" для объединения.');
+  }
   submitButton.style().set('shown', true);
 });
 
@@ -781,19 +786,41 @@ function handleMapClick(coords) {
  * Handles submit button click.
  */
 function handleSubmitClick() {
-  if (regionMethodSelect.getValue() === 'Графически' && DRAWN_GEOMETRY !== null) {
-    // Use centroid of drawn geometry as coords for compatibility
-    var centroid = DRAWN_GEOMETRY.centroid().coordinates();
-    centroid.evaluate(function(coords) {
-      COORDS = coords;
-      renderGraphics(COORDS);
-      // Remove drawing tool layers WITHOUT calling clear() to keep handler alive
-      var layers = drawingTools.layers();
-      while (layers.length() > 0) {
-        layers.remove(layers.get(0));
+  if (regionMethodSelect.getValue() === 'Графически') {
+    // Get all drawn geometries from drawing tools layers
+    var layers = drawingTools.layers();
+    if (layers.length() > 0) {
+      // Collect all geometries
+      var geometries = [];
+      for (var i = 0; i < layers.length(); i++) {
+        geometries.push(layers.get(i).toGeometry());
       }
-      DRAWN_GEOMETRY = null;
-    });
+      
+      // If only one geometry, use it directly
+      // If multiple geometries, create a union or bounding geometry
+      var finalGeometry;
+      if (geometries.length === 1) {
+        finalGeometry = geometries[0];
+      } else {
+        // Create a union of all geometries (combines them into one)
+        finalGeometry = ee.Algorithms.GeometryConstructors.MultiPolygon(geometries).dissolve();
+      }
+      
+      DRAWN_GEOMETRY = finalGeometry;
+      
+      // Use centroid of final geometry as coords for compatibility
+      var centroid = finalGeometry.centroid().coordinates();
+      centroid.evaluate(function(coords) {
+        COORDS = coords;
+        renderGraphics(COORDS);
+        // Remove drawing tool layers WITHOUT calling clear() to keep handler alive
+        var layers = drawingTools.layers();
+        while (layers.length() > 0) {
+          layers.remove(layers.get(0));
+        }
+        DRAWN_GEOMETRY = null;
+      });
+    }
   } else if (COORDS !== null) {
     renderGraphics(COORDS);
   }
