@@ -267,9 +267,20 @@ drawingTools.setDrawModes(['polygon', 'point', 'rectangle']);
 var clearDrawingButton = ui.Button({
   label: '🗑️ Очистить',
   onClick: function() {
-    drawingTools.clear();
+    // Remove drawing tool layers WITHOUT calling clear() to keep handler alive
+    var layers = drawingTools.layers();
+    while (layers.length() > 0) {
+      layers.remove(layers.get(0));
+    }
     DRAWN_GEOMETRY = null;
-    submitButton.style().set('shown', false);
+    submitButton.style().set('shown', true);
+    map.layers().forEach(function(layer) {
+      if (layer.getName() === 'Drawn area' || layer.getName() === 'Image chip area (square)' || layer.getName() === 'Point Circle') {
+        map.layers().remove(layer);
+      }
+    });
+    clearImgs()
+    CURRENT_REQUEST_ID++;
     print('Рисунок очищен');
   },
   style: {backgroundColor: '#ff6b6b', color: 'white', fontSize: '11px'}
@@ -631,6 +642,11 @@ function displayBrowseImg(col, aoiBox, aoiCircle, requestId) {
         .paint(ee.FeatureCollection(ee.Feature(table.geometry())), 1, 2)
         .visualize({palette: 'ff0000'});
       
+      // Финальная проверка перед созданием thumbnail (самая дорогая операция)
+      if (requestId !== CURRENT_REQUEST_ID) {
+        return;
+      }
+      
       var thumbnail = ui.Thumbnail({
         image: img.visualize(visParams).blend(aoiImg),
         params: {region: aoiBox, dimensions: '200',  crs: 'EPSG:3857',  format: 'PNG'}});
@@ -647,6 +663,11 @@ function displayBrowseImg(col, aoiBox, aoiCircle, requestId) {
         thumbnail,
       ], null, {margin: '4px 0px 0px 4px' , width: 'px'});
 
+      // Проверяем еще раз перед добавлением в панель
+      if (requestId !== CURRENT_REQUEST_ID) {
+        return;
+      }
+      
       imgCardPanel.add(imgCard);
     });
 
@@ -671,7 +692,6 @@ function renderGraphics(coords) {
   // Determine if using drawn geometry or clicked point
   var aoiCircle, aoiBox, aoiSquare;
   var useDrawnGeometry = (regionMethodSelect.getValue() === 'Графически' && DRAWN_GEOMETRY !== null);
-  print(useDrawnGeometry)
   
   if (useDrawnGeometry) {
     // Use drawn geometry
@@ -708,7 +728,7 @@ function renderGraphics(coords) {
     map.centerObject(aoiSquare, 14);
   } else {
     // In click mode: show the point circle
-    map.addLayer(aoiCircle, {color: AOI_COLOR});
+    map.addLayer(aoiCircle, {color: AOI_COLOR}, 'Point Circle');
     // Red square border shows the actual image chip area
     var aoiSquareCollection = ee.FeatureCollection([ee.Feature(aoiSquare)]);
     map.addLayer(ee.Image().byte().paint({featureCollection: aoiSquareCollection, width: 2}), 
@@ -760,8 +780,11 @@ function handleSubmitClick() {
     centroid.evaluate(function(coords) {
       COORDS = coords;
       renderGraphics(COORDS);
-      // Clear drawing tools after processing
-      drawingTools.clear();
+      // Remove drawing tool layers WITHOUT calling clear() to keep handler alive
+      var layers = drawingTools.layers();
+      while (layers.length() > 0) {
+        layers.remove(layers.get(0));
+      }
       DRAWN_GEOMETRY = null;
     });
   } else if (COORDS !== null) {
@@ -904,13 +927,19 @@ regionMethodSelect.onChange(function(method) {
     // Hide drawing tools
     drawingTools.setShown(false);
     drawingControlPanel.style().set('shown', false);
-    drawingTools.clear();
+    // Remove drawing tool layers WITHOUT calling clear() to keep handler alive
+    var layers = drawingTools.layers();
+    while (layers.length() > 0) {
+      layers.remove(layers.get(0));
+    }
     DRAWN_GEOMETRY = null;
+    CLICKED = false; // Reset CLICKED flag to prevent Submit button from showing
     instr.setValue('Click on a location');
     // Show chip width slider (used in click mode)
     regionWidthPanel.style().set('shown', true);
     // Re-enable map click handler
     map.onClick(handleMapClick);
+    submitButton.style().set('shown', false);
   }
   optionChange();
 });
