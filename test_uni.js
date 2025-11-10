@@ -906,6 +906,47 @@ function infoButtonHandler() {
   }
 }
 
+function geoJsonParser(jsonText) {
+  var json = JSON.parse(jsonText);
+  var geometries = [];
+  
+  for (var i = 0; i < json.features.length; i++) {
+    var feature = json.features[i];
+    var geomType = feature.geometry.type;
+    var coords = feature.geometry.coordinates;
+    
+    if (geomType === 'MultiPolygon') {
+      // MultiPolygon: coordinates[polygon][ring][point]
+      for (var p = 0; p < coords.length; p++) {
+        // Each polygon in the MultiPolygon
+        var polygonCoords = coords[p];
+        // Convert to Earth Engine Polygon
+        var eePolygon = ee.Geometry.Polygon(polygonCoords);
+        geometries.push(eePolygon);
+      }
+    } else if (geomType === 'Polygon') {
+      // Polygon: coordinates[ring][point]
+      var eePolygon = ee.Geometry.Polygon(coords);
+      geometries.push(eePolygon);
+    }
+  }
+  
+  // Return single geometry or union of all geometries
+  if (geometries.length === 0) {
+    print('⚠️ No geometries found in GeoJSON');
+    return null;
+  } else if (geometries.length === 1) {
+    print('✅ Loaded 1 geometry from GeoJSON');
+    return geometries[0];
+  } else {
+    print('✅ Loaded ' + geometries.length + ' geometries from GeoJSON, combining...');
+    // Combine all geometries into one
+    return ee.Algorithms.GeometryConstructors.MultiPolygon(
+      geometries.map(function(g) { return g.coordinates(); })
+    ).dissolve();
+  }
+}
+
 
 
 // #############################################################################
