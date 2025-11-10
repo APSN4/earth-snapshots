@@ -740,6 +740,9 @@ function handleSubmitClick() {
     centroid.evaluate(function(coords) {
       COORDS = coords;
       renderGraphics(COORDS);
+      // Clear drawing tools after processing
+      drawingTools.clear();
+      DRAWN_GEOMETRY = null;
     });
   } else if (COORDS !== null) {
     renderGraphics(COORDS);
