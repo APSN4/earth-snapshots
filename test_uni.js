@@ -798,35 +798,27 @@ function handleMapClick(coords) {
  */
 function handleSubmitClick() {
   if (regionMethodSelect.getValue() === 'Графически') {
-    var finalGeometry = null;
-    
-    // First, check if DRAWN_GEOMETRY is already set (e.g., from GeoJSON load)
-    if (DRAWN_GEOMETRY !== null) {
-      finalGeometry = DRAWN_GEOMETRY;
-      print('✅ Используется загруженная геометрия');
-    } else {
-      // Get all drawn geometries from drawing tools layers
-      var layers = drawingTools.layers();
-      if (layers.length() > 0) {
-        // Collect all geometries
-        var geometries = [];
-        for (var i = 0; i < layers.length(); i++) {
-          geometries.push(layers.get(i).toGeometry());
-        }
-        
-        // If only one geometry, use it directly
-        // If multiple geometries, create a union or bounding geometry
-        if (geometries.length === 1) {
-          finalGeometry = geometries[0];
-        } else {
-          // Create a union of all geometries (combines them into one)
-          finalGeometry = ee.Algorithms.GeometryConstructors.MultiPolygon(geometries).dissolve();
-        }
+    // Get all drawn geometries from drawing tools layers
+    var layers = drawingTools.layers();
+    if (layers.length() > 0) {
+      // Collect all geometries
+      var geometries = [];
+      for (var i = 0; i < layers.length(); i++) {
+        geometries.push(layers.get(i).toGeometry());
       }
-    }
-    
-    // Process the geometry if we have one
-    if (finalGeometry !== null) {
+      
+      // If only one geometry, use it directly
+      // If multiple geometries, create a union or bounding geometry
+      var finalGeometry;
+      if (geometries.length === 1) {
+        finalGeometry = geometries[0];
+      } else {
+        // Create a union of all geometries (combines them into one)
+        finalGeometry = ee.Algorithms.GeometryConstructors.MultiPolygon(geometries).dissolve();
+      }
+      
+      DRAWN_GEOMETRY = finalGeometry;
+      
       // Use centroid of final geometry as coords for compatibility
       var centroid = finalGeometry.centroid().coordinates();
       centroid.evaluate(function(coords) {
