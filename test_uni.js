@@ -89,6 +89,7 @@ var buttonPanel = ui.Panel(
 
 var coordZoom = ui.Textbox({placeholder:'Координаты', value:'37.63135958, 55.67095556', style:{width:'180px'}});
 var coordZoomDa = ui.Button({label: 'Zoom! 📸' , style: {margin: '0px 0px 0px -16px', width:'70px'}});
+  var coordGeoJson = ui.Button({label: '📄 GeoJSON' , style: {margin: '0px 10px', width:'160px', stretch: 'horizontal'}});
 
 var ZoomSlider = ui.Slider({min: 6, max: 18, value: 15, 
 step: 2, style: {stretch: 'horizontal', margin: '5px 0px 0px 10px', width:'120px'}});
@@ -107,7 +108,17 @@ var panel2 = ui.Panel({
   layout: ui.Panel.Layout.flow('horizontal')
 });
 
+var panel3 = ui.Panel({
+  widgets: [coordGeoJson],
+  layout: ui.Panel.Layout.flow('horizontal'),
+  style: {
+    position: 'bottom-right',
+    width: '200px'
+  }
+});
+
 panel.add(panel2)
+panel.add(panel3)
 
 // Options label.
 var optionsLabel = ui.Label('Options', sectionFont);
@@ -787,27 +798,35 @@ function handleMapClick(coords) {
  */
 function handleSubmitClick() {
   if (regionMethodSelect.getValue() === 'Графически') {
-    // Get all drawn geometries from drawing tools layers
-    var layers = drawingTools.layers();
-    if (layers.length() > 0) {
-      // Collect all geometries
-      var geometries = [];
-      for (var i = 0; i < layers.length(); i++) {
-        geometries.push(layers.get(i).toGeometry());
+    var finalGeometry = null;
+    
+    // First, check if DRAWN_GEOMETRY is already set (e.g., from GeoJSON load)
+    if (DRAWN_GEOMETRY !== null) {
+      finalGeometry = DRAWN_GEOMETRY;
+      print('✅ Используется загруженная геометрия');
+    } else {
+      // Get all drawn geometries from drawing tools layers
+      var layers = drawingTools.layers();
+      if (layers.length() > 0) {
+        // Collect all geometries
+        var geometries = [];
+        for (var i = 0; i < layers.length(); i++) {
+          geometries.push(layers.get(i).toGeometry());
+        }
+        
+        // If only one geometry, use it directly
+        // If multiple geometries, create a union or bounding geometry
+        if (geometries.length === 1) {
+          finalGeometry = geometries[0];
+        } else {
+          // Create a union of all geometries (combines them into one)
+          finalGeometry = ee.Algorithms.GeometryConstructors.MultiPolygon(geometries).dissolve();
+        }
       }
-      
-      // If only one geometry, use it directly
-      // If multiple geometries, create a union or bounding geometry
-      var finalGeometry;
-      if (geometries.length === 1) {
-        finalGeometry = geometries[0];
-      } else {
-        // Create a union of all geometries (combines them into one)
-        finalGeometry = ee.Algorithms.GeometryConstructors.MultiPolygon(geometries).dissolve();
-      }
-      
-      DRAWN_GEOMETRY = finalGeometry;
-      
+    }
+    
+    // Process the geometry if we have one
+    if (finalGeometry !== null) {
       // Use centroid of final geometry as coords for compatibility
       var centroid = finalGeometry.centroid().coordinates();
       centroid.evaluate(function(coords) {
@@ -947,6 +966,46 @@ function geoJsonParser(jsonText) {
   }
 }
 
+// Функция для добавления нового объекта
+function addNewObjectGeoJson() {
+  var namePrompt = prompt('Вставьте GeoJSON:', 'Код GeoJSON');
+  if (!namePrompt) return;
+  
+  try {
+    var geometry = geoJsonParser(namePrompt);
+    if (geometry !== null) {
+      // Set the geometry as if it was drawn
+      DRAWN_GEOMETRY = geometry;
+      CLICKED = true;
+      
+      // Switch to graphical mode (this will show drawing tools panel)
+      regionMethodSelect.setValue('Графически');
+      
+      // Make sure Options panel is visible (not the drawing panel)
+      controlElements.style().set('shown', true);
+      drawingControlPanel.style().set('shown', false);
+      controlButton.setLabel('Options ❮');
+      
+      // Show the submit button
+      submitButton.style().set('shown', true);
+      
+      // Show on map with yellow border (like drawn geometry)
+      map.layers().forEach(function(el) {
+        map.layers().remove(el);
+      });
+      
+      var geomCollection = ee.FeatureCollection([ee.Feature(geometry)]);
+      map.addLayer(ee.Image().byte().paint({featureCollection: geomCollection, width: 3}), 
+                   {palette: ['yellow']}, 'Loaded GeoJSON');
+      map.centerObject(geometry, 14);
+      
+      print('✅ GeoJSON загружен! Откройте Options и нажмите "Submit changes" для обработки.');
+    }
+  } catch (e) {
+    print('❌ Ошибка парсинга GeoJSON: ' + e.message);
+  }
+}
+
 
 
 // #############################################################################
@@ -975,6 +1034,7 @@ controlPanel.add(drawingControlPanel);
 map.add(controlPanel);
 map.add(panel);
 
+coordGeoJson.onClick(addNewObjectGeoJson);
 infoButton.onClick(infoButtonHandler);
 controlButton.onClick(controlButtonHandler);
 sensorSelect.onChange(optionChange);
