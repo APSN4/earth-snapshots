@@ -272,7 +272,8 @@ var submitButton = ui.Button({
 // ### DEFINE INITIALIZING CONSTANTS ###
 // #############################################################################
 
-// Set color of the circle to show on map and images where clicked
+// Colors are now configurable via Settings panel
+// Legacy variable (kept for compatibility)
 var AOI_COLOR = 'ffffff';  //'b300b3';
 
 var COORDS = null;
@@ -667,12 +668,12 @@ function displayBrowseImg(col, aoiBox, aoiCircle, geometryForBorder, requestId) 
 
       var aoiImg = ee.Image().byte()
         .paint(ee.FeatureCollection(ee.Feature(table.geometry())), 1, 2)
-        .visualize({palette: 'ff0000'});
+        .visualize({palette: colorOptions[chipBorderColorSelect.getValue()]});
       
-      // Yellow border for your AOI (drawn area or clicked point)
-      var yellowBorder = ee.Image().byte()
+      // Border for your AOI (drawn area or clicked point)
+      var aoiBorder = ee.Image().byte()
         .paint(ee.FeatureCollection(ee.Feature(geometryForBorder)), 1, 3)
-        .visualize({palette: 'ffff00'});
+        .visualize({palette: colorOptions[aoiBorderColorSelect.getValue()]});
       
       // Финальная проверка перед созданием thumbnail (самая дорогая операция)
       if (requestId !== CURRENT_REQUEST_ID) {
@@ -680,7 +681,7 @@ function displayBrowseImg(col, aoiBox, aoiCircle, geometryForBorder, requestId) 
       }
       
       var thumbnail = ui.Thumbnail({
-        image: img.visualize(visParams).blend(aoiImg).blend(yellowBorder),
+        image: img.visualize(visParams).blend(aoiImg).blend(aoiBorder),
         params: {region: aoiBox, dimensions: thumbnailSizeSlider.getValue().toString(),  crs: 'EPSG:3857',  format: 'PNG'}});
       
       var button = ui.Button(date);
@@ -752,19 +753,19 @@ function renderGraphics(coords) {
     // In graphical mode: show the drawn geometry
     var drawnGeomCollection = ee.FeatureCollection([ee.Feature(DRAWN_GEOMETRY)]);
     map.addLayer(ee.Image().byte().paint({featureCollection: drawnGeomCollection, width: 3}), 
-                 {palette: ['yellow']}, 'Drawn area');
-    // Red square border shows the actual image chip area
+                 {palette: [colorOptions[aoiBorderColorSelect.getValue()]]}, 'Drawn area');
+    // Square border shows the actual image chip area
     var aoiSquareCollection = ee.FeatureCollection([ee.Feature(aoiSquare)]);
     map.addLayer(ee.Image().byte().paint({featureCollection: aoiSquareCollection, width: 2}), 
-                 {palette: ['red']}, 'Image chip area (square)');
+                 {palette: [colorOptions[chipBorderColorSelect.getValue()]]}, 'Image chip area (square)');
     map.centerObject(aoiSquare, 14);
   } else {
     // In click mode: show the point circle
-    map.addLayer(aoiCircle, {color: AOI_COLOR}, 'Point Circle');
-    // Red square border shows the actual image chip area
+    map.addLayer(aoiCircle, {color: colorOptions[pointCircleColorSelect.getValue()]}, 'Point Circle');
+    // Square border shows the actual image chip area
     var aoiSquareCollection = ee.FeatureCollection([ee.Feature(aoiSquare)]);
     map.addLayer(ee.Image().byte().paint({featureCollection: aoiSquareCollection, width: 2}), 
-                 {palette: ['red']}, 'Image chip area (square)');
+                 {palette: [colorOptions[chipBorderColorSelect.getValue()]]}, 'Image chip area (square)');
     map.centerObject(aoiCircle, 14);
   }
 
@@ -1093,12 +1094,51 @@ var thumbnailSizeSlider = ui.Slider({
 });
 var thumbnailSizePanel = ui.Panel([thumbnailSizeLabel, thumbnailSizeSlider], null, {stretch: 'horizontal'});
 
+// Color selection for boundaries
+var colorOptions = {
+  'Red': 'ff0000',
+  'Yellow': 'ffff00',
+  'Blue': '0000ff',
+  'Green': '00ff00',
+  'White': 'ffffff',
+  'Orange': 'ff8800',
+  'Purple': 'ff00ff',
+  'Cyan': '00ffff'
+};
+
+var aoiBorderColorLabel = ui.Label({value: 'AOI border color', style: headerFont});
+var aoiBorderColorSelect = ui.Select({
+  items: Object.keys(colorOptions),
+  value: 'Yellow',
+  style: {stretch: 'horizontal'}
+});
+var aoiBorderColorPanel = ui.Panel([aoiBorderColorLabel, aoiBorderColorSelect], null, {stretch: 'horizontal'});
+
+var chipBorderColorLabel = ui.Label({value: 'Image chip border color', style: headerFont});
+var chipBorderColorSelect = ui.Select({
+  items: Object.keys(colorOptions),
+  value: 'Red',
+  style: {stretch: 'horizontal'}
+});
+var chipBorderColorPanel = ui.Panel([chipBorderColorLabel, chipBorderColorSelect], null, {stretch: 'horizontal'});
+
+var pointCircleColorLabel = ui.Label({value: 'Point circle color', style: headerFont});
+var pointCircleColorSelect = ui.Select({
+  items: Object.keys(colorOptions),
+  value: 'White',
+  style: {stretch: 'horizontal'}
+});
+var pointCircleColorPanel = ui.Panel([pointCircleColorLabel, pointCircleColorSelect], null, {stretch: 'horizontal'});
+
 settingsElements.add(settingsLabel);
 settingsElements.add(settingsDescLabel);
 settingsElements.add(themePanel);
 settingsElements.add(languagePanel);
 settingsElements.add(autoLoadPanel);
 settingsElements.add(thumbnailSizePanel);
+settingsElements.add(aoiBorderColorPanel);
+settingsElements.add(chipBorderColorPanel);
+settingsElements.add(pointCircleColorPanel);
 
 controlElements.add(optionsLabel);
 controlElements.add(sensorPanel);
