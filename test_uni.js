@@ -46,7 +46,7 @@ ui.url.set('chipwidth', chipWidthUrl);
 
 // Style.
 var CONTROL_PANEL_WIDTH = '280px';
-var CONTROL_PANEL_WIDTH_HIDE = '141px';
+var CONTROL_PANEL_WIDTH_HIDE = '220px';
 var textFont = {fontSize: '12px'};
 var headerFont = {
   fontSize: '13px', fontWeight: 'bold', margin: '4px 8px 0px 8px'};
@@ -68,6 +68,10 @@ var infoElements = ui.Panel(
 var controlElements = ui.Panel(
   {style: {shown: false, margin: '0px -8px 0px -8px'}});
 
+// Settings panel.
+var settingsElements = ui.Panel(
+  {style: {shown: false, margin: '0px -8px 0px -8px'}});
+
 // Instruction panel.
 var instr = ui.Label('Click on a location',
   {fontSize: '15px', color: '#303030', margin: '0px 0px 6px 0px'});
@@ -76,6 +80,10 @@ var instr = ui.Label('Click on a location',
 var infoButton = ui.Button(
   {label: 'About ❯', style: {margin: '0px 4px 0px 0px'}});
 
+// Show/hide settings panel button.
+var settingsButton = ui.Button(
+  {label: 'Settings ❯', style: {margin: '0px 4px 0px 0px'}});
+
 // Show/hide control panel button.
 var controlButton = ui.Button(
   {label: 'Options ❯', style: {margin: '0px 0px 0px 0px'}});
@@ -83,7 +91,7 @@ var controlButton = ui.Button(
 
 // Info/control button panel.
 var buttonPanel = ui.Panel(
-  [infoButton, controlButton],
+  [infoButton, settingsButton, controlButton],
   ui.Panel.Layout.Flow('horizontal'),
   {stretch: 'horizontal', margin: '0px 0px 0px 0px'});
 
@@ -123,6 +131,9 @@ panel.add(panel3)
 // Options label.
 var optionsLabel = ui.Label('Options', sectionFont);
 optionsLabel.style().set('margin', '16px 8px 2px 8px');
+
+// Settings label.
+var settingsLabel = ui.Label('Settings', sectionFont);
 
 // Information label.
 var infoLabel = ui.Label('About', sectionFont);
@@ -670,7 +681,7 @@ function displayBrowseImg(col, aoiBox, aoiCircle, geometryForBorder, requestId) 
       
       var thumbnail = ui.Thumbnail({
         image: img.visualize(visParams).blend(aoiImg).blend(yellowBorder),
-        params: {region: aoiBox, dimensions: '200',  crs: 'EPSG:3857',  format: 'PNG'}});
+        params: {region: aoiBox, dimensions: thumbnailSizeSlider.getValue().toString(),  crs: 'EPSG:3857',  format: 'PNG'}});
       
       var button = ui.Button(date);
       button.onClick(function() 
@@ -901,7 +912,7 @@ function controlButtonHandler() {
     }
   }
   
-  if(infoShow | controlShow) {
+  if(infoShow | settingsShow | controlShow) {
     controlPanel.style().set('width', CONTROL_PANEL_WIDTH);
   } else {
     controlPanel.style().set('width', CONTROL_PANEL_WIDTH_HIDE);
@@ -923,7 +934,29 @@ function infoButtonHandler() {
     infoButton.setLabel('About ❮');
   }
   
-  if(infoShow | controlShow) {
+  if(infoShow | settingsShow | controlShow) {
+    controlPanel.style().set('width', CONTROL_PANEL_WIDTH);
+  } else {
+    controlPanel.style().set('width', CONTROL_PANEL_WIDTH_HIDE);
+  }
+}
+
+/**
+ * Show/hide the settings panel.
+ */
+var settingsShow = false;
+function settingsButtonHandler() {
+  if(settingsShow) {
+    settingsShow = false;
+    settingsElements.style().set('shown', false);
+    settingsButton.setLabel('Settings ❯');
+  } else {
+    settingsShow = true;
+    settingsElements.style().set('shown', true);
+    settingsButton.setLabel('Settings ❮');
+  }
+  
+  if(infoShow | settingsShow | controlShow) {
     controlPanel.style().set('width', CONTROL_PANEL_WIDTH);
   } else {
     controlPanel.style().set('width', CONTROL_PANEL_WIDTH_HIDE);
@@ -1021,6 +1054,52 @@ infoElements.add(infoLabel);
 infoElements.add(aboutLabel);
 infoElements.add(appCodeLink);
 
+// Settings panel content
+var settingsDescLabel = ui.Label(
+  'Configure application preferences and display settings.',
+  infoFont);
+
+var themeLabel = ui.Label({value: 'UI Theme', style: headerFont});
+var themeSelect = ui.Select({
+  items: ['Light', 'Dark', 'Auto'],
+  value: 'Light',
+  style: {stretch: 'horizontal'}
+});
+var themePanel = ui.Panel([themeLabel, themeSelect], null, {stretch: 'horizontal'});
+
+var languageLabel = ui.Label({value: 'Language', style: headerFont});
+var languageSelect = ui.Select({
+  items: ['English', 'Русский'],
+  value: 'Русский',
+  style: {stretch: 'horizontal'}
+});
+var languagePanel = ui.Panel([languageLabel, languageSelect], null, {stretch: 'horizontal'});
+
+var autoLoadLabel = ui.Label({value: 'Auto-load imagery', style: headerFont});
+var autoLoadCheckbox = ui.Checkbox({
+  label: 'Automatically load images on selection',
+  value: true,
+  style: {fontSize: '11px'}
+});
+var autoLoadPanel = ui.Panel([autoLoadLabel, autoLoadCheckbox], null, {stretch: 'horizontal'});
+
+var thumbnailSizeLabel = ui.Label({value: 'Thumbnail size (pixels)', style: headerFont});
+var thumbnailSizeSlider = ui.Slider({
+  min: 100,
+  max: 1000,
+  value: 200,
+  step: 50,
+  style: {stretch: 'horizontal'}
+});
+var thumbnailSizePanel = ui.Panel([thumbnailSizeLabel, thumbnailSizeSlider], null, {stretch: 'horizontal'});
+
+settingsElements.add(settingsLabel);
+settingsElements.add(settingsDescLabel);
+settingsElements.add(themePanel);
+settingsElements.add(languagePanel);
+settingsElements.add(autoLoadPanel);
+settingsElements.add(thumbnailSizePanel);
+
 controlElements.add(optionsLabel);
 controlElements.add(sensorPanel);
 controlElements.add(rgbPanel);
@@ -1033,6 +1112,7 @@ controlElements.add(submitButton);
 controlPanel.add(instr);
 controlPanel.add(buttonPanel);
 controlPanel.add(infoElements);
+controlPanel.add(settingsElements);
 controlPanel.add(controlElements);
 controlPanel.add(drawingControlPanel);
 
@@ -1041,6 +1121,7 @@ map.add(panel);
 
 coordGeoJson.onClick(addNewObjectGeoJson);
 infoButton.onClick(infoButtonHandler);
+settingsButton.onClick(settingsButtonHandler);
 controlButton.onClick(controlButtonHandler);
 sensorSelect.onChange(optionChange);
 rgbSelect.onChange(optionChange);
