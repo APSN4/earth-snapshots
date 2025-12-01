@@ -801,10 +801,23 @@ function handleSubmitClick() {
     // Get all drawn geometries from drawing tools layers
     var layers = drawingTools.layers();
     if (layers.length() > 0) {
-      // Collect all geometries
+      // Collect all geometries from all layers and their features
       var geometries = [];
       for (var i = 0; i < layers.length(); i++) {
-        geometries.push(layers.get(i).toGeometry());
+        var layer = layers.get(i);
+        // Check if layer has geometries() method (multiple features)
+        // If not, use toGeometry() for single geometry
+        try {
+          var layerGeometries = layer.geometries();
+          if (layerGeometries) {
+            for (var j = 0; j < layerGeometries.length(); j++) {
+              geometries.push(layerGeometries.get(j));
+            }
+          }
+        } catch(e) {
+          // If geometries() doesn't exist, fall back to toGeometry()
+          geometries.push(layer.toGeometry());
+        }
       }
       
       // If only one geometry, use it directly
