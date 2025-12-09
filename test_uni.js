@@ -207,7 +207,7 @@ var regionWidthPanel = ui.Panel(
 // Region selection method.
 var regionMethodLabel = ui.Label(
   {value: 'Способ выбора области', style: headerFont});
-var regionMethodList = ['По клику', 'Графически', 'GeoJSON'];
+var regionMethodList = ['По клику', 'Графически', 'GeoJSON', '4 координаты'];
 var regionMethodSelect = ui.Select({
   items: regionMethodList, 
   value: 'По клику', 
@@ -289,7 +289,7 @@ function clearAllAreas() {
   map.layers().forEach(function(layer) {
     var name = layer.getName();
     if (name === 'Drawn area' || name === 'Image chip area (square)' || 
-        name === 'Point Circle' || name === 'Loaded GeoJSON') {
+        name === 'Point Circle' || name === 'Loaded GeoJSON' || name === 'Loaded from 4 coords') {
       layersToRemove.push(layer);
     }
   });
@@ -313,7 +313,7 @@ function hasMapLayers() {
   map.layers().forEach(function(layer) {
     var name = layer.getName();
     if (name === 'Drawn area' || name === 'Image chip area (square)' || 
-        name === 'Point Circle' || name === 'Loaded GeoJSON') {
+        name === 'Point Circle' || name === 'Loaded GeoJSON' || name === 'Loaded from 4 coords') {
       hasLayers = true;
     }
   });
@@ -864,52 +864,63 @@ function handleMapClick(coords) {
  */
 function handleSubmitClick() {
   if (regionMethodSelect.getValue() === 'Графически') {
-    // Get all drawn geometries from drawing tools layers
-    var layers = drawingTools.layers();
-    if (layers.length() > 0) {
-      // Collect all geometries from all layers and their features
-      var geometries = [];
-      for (var i = 0; i < layers.length(); i++) {
-        var layer = layers.get(i);
-        // Check if layer has geometries() method (multiple features)
-        // If not, use toGeometry() for single geometry
-        try {
-          var layerGeometries = layer.geometries();
-          if (layerGeometries) {
-            for (var j = 0; j < layerGeometries.length(); j++) {
-              geometries.push(layerGeometries.get(j));
-            }
-          }
-        } catch(e) {
-          // If geometries() doesn't exist, fall back to toGeometry()
-          geometries.push(layer.toGeometry());
-        }
-      }
-      
-      // If only one geometry, use it directly
-      // If multiple geometries, create a union or bounding geometry
-      var finalGeometry;
-      if (geometries.length === 1) {
-        finalGeometry = geometries[0];
-      } else {
-        // Create a union of all geometries (combines them into one)
-        finalGeometry = ee.Algorithms.GeometryConstructors.MultiPolygon(geometries).dissolve();
-      }
-      
-      DRAWN_GEOMETRY = finalGeometry;
-      
-      // Use centroid of final geometry as coords for compatibility
-      var centroid = finalGeometry.centroid().coordinates();
+    // Check if DRAWN_GEOMETRY is already set (from GeoJSON or 4 coords)
+    if (DRAWN_GEOMETRY !== null) {
+      // Use the already set geometry
+      var centroid = DRAWN_GEOMETRY.centroid().coordinates();
       centroid.evaluate(function(coords) {
         COORDS = coords;
         renderGraphics(COORDS);
-        // Remove drawing tool layers WITHOUT calling clear() to keep handler alive
-        var layers = drawingTools.layers();
-        while (layers.length() > 0) {
-          layers.remove(layers.get(0));
-        }
         DRAWN_GEOMETRY = null;
       });
+    } else {
+      // Get all drawn geometries from drawing tools layers
+      var layers = drawingTools.layers();
+      if (layers.length() > 0) {
+        // Collect all geometries from all layers and their features
+        var geometries = [];
+        for (var i = 0; i < layers.length(); i++) {
+          var layer = layers.get(i);
+          // Check if layer has geometries() method (multiple features)
+          // If not, use toGeometry() for single geometry
+          try {
+            var layerGeometries = layer.geometries();
+            if (layerGeometries) {
+              for (var j = 0; j < layerGeometries.length(); j++) {
+                geometries.push(layerGeometries.get(j));
+              }
+            }
+          } catch(e) {
+            // If geometries() doesn't exist, fall back to toGeometry()
+            geometries.push(layer.toGeometry());
+          }
+        }
+        
+        // If only one geometry, use it directly
+        // If multiple geometries, create a union or bounding geometry
+        var finalGeometry;
+        if (geometries.length === 1) {
+          finalGeometry = geometries[0];
+        } else {
+          // Create a union of all geometries (combines them into one)
+          finalGeometry = ee.Algorithms.GeometryConstructors.MultiPolygon(geometries).dissolve();
+        }
+        
+        DRAWN_GEOMETRY = finalGeometry;
+        
+        // Use centroid of final geometry as coords for compatibility
+        var centroid = finalGeometry.centroid().coordinates();
+        centroid.evaluate(function(coords) {
+          COORDS = coords;
+          renderGraphics(COORDS);
+          // Remove drawing tool layers WITHOUT calling clear() to keep handler alive
+          var layers = drawingTools.layers();
+          while (layers.length() > 0) {
+            layers.remove(layers.get(0));
+          }
+          DRAWN_GEOMETRY = null;
+        });
+      }
     }
   } else if (COORDS !== null) {
     renderGraphics(COORDS);
@@ -1062,6 +1073,101 @@ function geoJsonParser(jsonText) {
     return ee.Algorithms.GeometryConstructors.MultiPolygon(
       geometries.map(function(g) { return g.coordinates(); })
     ).dissolve();
+  }
+}
+
+// Функция для создания полигона из 4 координат
+function addNewObjectFrom4Coords() {
+  var coordPrompt = prompt('Введите 4 координаты (lon1,lat1,lon2,lat2,lon3,lat3,lon4,lat4):', '80.95168200,53.49430700,83.04978700,54.73861000,83.04978700,53.49430700,80.95168200,54.73861000');
+  if (!coordPrompt) {
+    // User cancelled - reset to default mode
+    regionMethodSelect.setValue('По клику', false);
+    return;
+  }
+  
+  try {
+    // Parse coordinates
+    var coords = coordPrompt.split(',').map(function(x) { return parseFloat(x.trim()); });
+    
+    // Check if we have exactly 8 numbers (4 points x 2 coordinates)
+    if (coords.length !== 8) {
+      print('❌ Ошибка: необходимо ввести ровно 8 чисел (4 точки по 2 координаты)');
+      regionMethodSelect.setValue('По клику', false);
+      return;
+    }
+    
+    // Check if all values are valid numbers
+    for (var i = 0; i < coords.length; i++) {
+      if (isNaN(coords[i])) {
+        print('❌ Ошибка: все значения должны быть числами');
+        regionMethodSelect.setValue('По клику', false);
+        return;
+      }
+    }
+    
+    // Extract 4 points
+    var points = [
+      {lon: coords[0], lat: coords[1]},
+      {lon: coords[2], lat: coords[3]},
+      {lon: coords[4], lat: coords[5]},
+      {lon: coords[6], lat: coords[7]}
+    ];
+    
+    // Find bounding box
+    var minLon = Math.min(points[0].lon, points[1].lon, points[2].lon, points[3].lon);
+    var maxLon = Math.max(points[0].lon, points[1].lon, points[2].lon, points[3].lon);
+    var minLat = Math.min(points[0].lat, points[1].lat, points[2].lat, points[3].lat);
+    var maxLat = Math.max(points[0].lat, points[1].lat, points[2].lat, points[3].lat);
+    
+    // Create rectangle in clockwise order (looking from above):
+    // top-left -> top-right -> bottom-right -> bottom-left -> back to top-left
+    var polygonCoords = [
+      [minLon, maxLat],  // top-left (верхний левый)
+      [maxLon, maxLat],  // top-right (верхний правый)
+      [maxLon, minLat],  // bottom-right (нижний правый)
+      [minLon, minLat],  // bottom-left (нижний левый)
+      [minLon, maxLat]   // close polygon
+    ];
+    
+    var geometry = ee.Geometry.Polygon([polygonCoords]);
+    
+    // Set the geometry as if it was drawn
+    DRAWN_GEOMETRY = geometry;
+    CLICKED = true;
+    
+    // Switch to graphical mode without triggering onChange again
+    regionMethodSelect.setValue('Графически', false);
+    
+    // Make sure Options panel is visible (not the drawing panel)
+    controlElements.style().set('shown', true);
+    drawingControlPanel.style().set('shown', false);
+    controlButton.setLabel('Options ❮');
+    controlShow = true;
+    
+    // Hide chip width slider (not used in graphical mode)
+    regionWidthPanel.style().set('shown', false);
+    
+    // Show the submit button
+    submitButton.style().set('shown', true);
+    
+    // Show on map with yellow border
+    map.layers().forEach(function(el) {
+      map.layers().remove(el);
+    });
+    
+    var geomCollection = ee.FeatureCollection([ee.Feature(geometry)]);
+    map.addLayer(ee.Image().byte().paint({featureCollection: geomCollection, width: 3}), 
+                 {palette: ['yellow']}, 'Loaded from 4 coords');
+    map.centerObject(geometry, 14);
+    
+    // Update clear panel visibility since we added a layer
+    updateClearPanelVisibility();
+    
+    print('✅ Полигон из 4 координат создан! Нажмите "Submit changes" для обработки.');
+  } catch (e) {
+    print('❌ Ошибка создания полигона: ' + e.message);
+    // Reset to default mode on error
+    regionMethodSelect.setValue('По клику', false);
   }
 }
 
@@ -1254,6 +1360,11 @@ regionMethodSelect.onChange(function(method) {
   if (method === 'GeoJSON') {
     // Open GeoJSON dialog
     addNewObjectGeoJson();
+    // After dialog, the function will set the mode to 'Графически' if successful
+    return;
+  } else if (method === '4 координаты') {
+    // Open 4 coordinates dialog
+    addNewObjectFrom4Coords();
     // After dialog, the function will set the mode to 'Графически' if successful
     return;
   } else if (method === 'Графически') {
