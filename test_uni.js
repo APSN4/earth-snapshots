@@ -331,8 +331,9 @@ var sliderSettingsPanel = ui.Panel({
 var regionWidthSettingsButton = ui.Button({
   label: '⚙️',
   style: {
-    width: '50px',
-    padding: '0px'
+    width: '80px',
+    padding: '0px',
+    margin: '0px 0px 0px 0px'
   },
   onClick: function() {
     sliderSettingsVisible = !sliderSettingsVisible;
