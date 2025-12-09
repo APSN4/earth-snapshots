@@ -97,7 +97,6 @@ var buttonPanel = ui.Panel(
 
 var coordZoom = ui.Textbox({placeholder:'Координаты', value:'37.63135958, 55.67095556', style:{width:'180px'}});
 var coordZoomDa = ui.Button({label: 'Zoom! 📸' , style: {margin: '0px 0px 0px -16px', width:'70px'}});
-  var coordGeoJson = ui.Button({label: '📄 GeoJSON' , style: {margin: '0px 10px', width:'160px', stretch: 'horizontal'}});
 
 var ZoomSlider = ui.Slider({min: 6, max: 18, value: 15, 
 step: 2, style: {stretch: 'horizontal', margin: '5px 0px 0px 10px', width:'120px'}});
@@ -116,17 +115,7 @@ var panel2 = ui.Panel({
   layout: ui.Panel.Layout.flow('horizontal')
 });
 
-var panel3 = ui.Panel({
-  widgets: [coordGeoJson],
-  layout: ui.Panel.Layout.flow('horizontal'),
-  style: {
-    position: 'bottom-right',
-    width: '200px'
-  }
-});
-
 panel.add(panel2)
-panel.add(panel3)
 
 // Options label.
 var optionsLabel = ui.Label('Options', sectionFont);
@@ -218,7 +207,7 @@ var regionWidthPanel = ui.Panel(
 // Region selection method.
 var regionMethodLabel = ui.Label(
   {value: 'Способ выбора области', style: headerFont});
-var regionMethodList = ['По клику', 'Графически'];
+var regionMethodList = ['По клику', 'Графически', 'GeoJSON'];
 var regionMethodSelect = ui.Select({
   items: regionMethodList, 
   value: 'По клику', 
@@ -1008,7 +997,11 @@ function geoJsonParser(jsonText) {
 // Функция для добавления нового объекта
 function addNewObjectGeoJson() {
   var namePrompt = prompt('Вставьте GeoJSON:', 'Код GeoJSON');
-  if (!namePrompt) return;
+  if (!namePrompt) {
+    // User cancelled - reset to default mode
+    regionMethodSelect.setValue('По клику', false);
+    return;
+  }
   
   try {
     var geometry = geoJsonParser(namePrompt);
@@ -1017,13 +1010,17 @@ function addNewObjectGeoJson() {
       DRAWN_GEOMETRY = geometry;
       CLICKED = true;
       
-      // Switch to graphical mode (this will show drawing tools panel)
-      regionMethodSelect.setValue('Графически');
+      // Switch to graphical mode without triggering onChange again
+      regionMethodSelect.setValue('Графически', false);
       
       // Make sure Options panel is visible (not the drawing panel)
       controlElements.style().set('shown', true);
       drawingControlPanel.style().set('shown', false);
       controlButton.setLabel('Options ❮');
+      controlShow = true;
+      
+      // Hide chip width slider (not used in graphical mode)
+      regionWidthPanel.style().set('shown', false);
       
       // Show the submit button
       submitButton.style().set('shown', true);
@@ -1038,10 +1035,15 @@ function addNewObjectGeoJson() {
                    {palette: ['yellow']}, 'Loaded GeoJSON');
       map.centerObject(geometry, 14);
       
-      print('✅ GeoJSON загружен! Откройте Options и нажмите "Submit changes" для обработки.');
+      print('✅ GeoJSON загружен! Нажмите "Submit changes" для обработки.');
+    } else {
+      // Parsing returned null - reset to default mode
+      regionMethodSelect.setValue('По клику', false);
     }
   } catch (e) {
     print('❌ Ошибка парсинга GeoJSON: ' + e.message);
+    // Reset to default mode on error
+    regionMethodSelect.setValue('По клику', false);
   }
 }
 
@@ -1159,7 +1161,6 @@ controlPanel.add(drawingControlPanel);
 map.add(controlPanel);
 map.add(panel);
 
-coordGeoJson.onClick(addNewObjectGeoJson);
 infoButton.onClick(infoButtonHandler);
 settingsButton.onClick(settingsButtonHandler);
 controlButton.onClick(controlButtonHandler);
@@ -1175,7 +1176,12 @@ map.onClick(handleMapClick);
 
 // Handler for region method selection
 regionMethodSelect.onChange(function(method) {
-  if (method === 'Графически') {
+  if (method === 'GeoJSON') {
+    // Open GeoJSON dialog
+    addNewObjectGeoJson();
+    // After dialog, the function will set the mode to 'Графически' if successful
+    return;
+  } else if (method === 'Графически') {
     // Show drawing tools
     drawingTools.setShown(true);
     drawingControlPanel.style().set('shown', true);
