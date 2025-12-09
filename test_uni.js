@@ -275,30 +275,69 @@ var drawingTools = map.drawingTools();
 drawingTools.setShown(false);
 drawingTools.setDrawModes(['polygon', 'point', 'rectangle']);
 
-// Clear drawing button
+// Function to clear all areas from map
+function clearAllAreas() {
+  // Remove drawing tool layers WITHOUT calling clear() to keep handler alive
+  var layers = drawingTools.layers();
+  while (layers.length() > 0) {
+    layers.remove(layers.get(0));
+  }
+  DRAWN_GEOMETRY = null;
+  
+  // Remove all relevant map layers
+  var layersToRemove = [];
+  map.layers().forEach(function(layer) {
+    var name = layer.getName();
+    if (name === 'Drawn area' || name === 'Image chip area (square)' || 
+        name === 'Point Circle' || name === 'Loaded GeoJSON') {
+      layersToRemove.push(layer);
+    }
+  });
+  layersToRemove.forEach(function(layer) {
+    map.layers().remove(layer);
+  });
+  
+  clearImgs();
+  CURRENT_REQUEST_ID++;
+  submitButton.style().set('shown', false);
+  
+  // Hide clear panel after clearing
+  clearAreaPanel.style().set('shown', false);
+  
+  print('Область очищена');
+}
+
+// Function to check if there are relevant layers on the map
+function hasMapLayers() {
+  var hasLayers = false;
+  map.layers().forEach(function(layer) {
+    var name = layer.getName();
+    if (name === 'Drawn area' || name === 'Image chip area (square)' || 
+        name === 'Point Circle' || name === 'Loaded GeoJSON') {
+      hasLayers = true;
+    }
+  });
+  return hasLayers;
+}
+
+// Function to update clear panel visibility
+function updateClearPanelVisibility() {
+  // Only show in click mode and only when there are layers
+  if (regionMethodSelect.getValue() !== 'Графически' && hasMapLayers()) {
+    clearAreaPanel.style().set('shown', true);
+  } else {
+    clearAreaPanel.style().set('shown', false);
+  }
+}
+
+// Clear drawing button for drawing control panel
 var clearDrawingButton = ui.Button({
   label: '🗑️ Очистить',
-  onClick: function() {
-    // Remove drawing tool layers WITHOUT calling clear() to keep handler alive
-    var layers = drawingTools.layers();
-    while (layers.length() > 0) {
-      layers.remove(layers.get(0));
-    }
-    DRAWN_GEOMETRY = null;
-    submitButton.style().set('shown', true);
-    map.layers().forEach(function(layer) {
-      if (layer.getName() === 'Drawn area' || layer.getName() === 'Image chip area (square)' || layer.getName() === 'Point Circle') {
-        map.layers().remove(layer);
-      }
-    });
-    clearImgs()
-    CURRENT_REQUEST_ID++;
-    print('Рисунок очищен');
-  },
+  onClick: clearAllAreas,
   style: {backgroundColor: '#ff6b6b', color: 'white', fontSize: '11px'}
 });
 
-// Drawing tools control panel
+// Drawing tools control panel (shown in "Графически" mode)
 var drawingControlPanel = ui.Panel({
   widgets: [
     ui.Label('🎨 Графический выбор области', {fontWeight: 'bold', fontSize: '14px'}),
@@ -309,6 +348,29 @@ var drawingControlPanel = ui.Panel({
   ],
   style: {
     position: 'top-left', 
+    width: '220px',
+    shown: false,
+    margin: '10px 0px 0px 0px'
+  }
+});
+
+// Clear button for click mode panel
+var clearAreaButton = ui.Button({
+  label: '🗑️ Очистить',
+  onClick: clearAllAreas,
+  style: {backgroundColor: '#ff6b6b', color: 'white', fontSize: '11px'}
+});
+
+// Clear area panel (shown in "По клику" mode when there are layers)
+var clearAreaPanel = ui.Panel({
+  widgets: [
+    ui.Label('🎨 Графический выбор области', {fontWeight: 'bold', fontSize: '14px'}),
+    ui.Label('1. Выберите инструмент рисования', {fontSize: '11px'}),
+    ui.Label('2. Нарисуйте область на карте', {fontSize: '11px'}),
+    ui.Label('3. Нажмите "Submit changes"', {fontSize: '11px'}),
+    clearAreaButton
+  ],
+  style: {
     width: '220px',
     shown: false,
     margin: '10px 0px 0px 0px'
@@ -758,6 +820,9 @@ function renderGraphics(coords) {
     map.centerObject(aoiCircle, 14);
   }
 
+  // Update clear panel visibility since we added layers to the map
+  updateClearPanelVisibility();
+
   // Get collection options.
 
   var cloudThresh = cloudSlider.getValue();
@@ -890,15 +955,21 @@ function controlButtonHandler() {
     controlShow = false;
     controlElements.style().set('shown', false);
     controlButton.setLabel('Options ❯');
-    // Hide drawing control panel when Options is hidden
+    // Hide both panels when Options is hidden
     drawingControlPanel.style().set('shown', false);
+    clearAreaPanel.style().set('shown', false);
   } else {
     controlShow = true;
     controlElements.style().set('shown', true);
     controlButton.setLabel('Options ❮');
-    // Show drawing control panel if graphical mode is selected
+    // Show appropriate panel based on mode
     if(regionMethodSelect.getValue() === 'Графически') {
       drawingControlPanel.style().set('shown', true);
+      clearAreaPanel.style().set('shown', false);
+    } else {
+      drawingControlPanel.style().set('shown', false);
+      // Show clear panel if there are layers on the map
+      updateClearPanelVisibility();
     }
   }
   
@@ -1035,6 +1106,9 @@ function addNewObjectGeoJson() {
                    {palette: ['yellow']}, 'Loaded GeoJSON');
       map.centerObject(geometry, 14);
       
+      // Update clear panel visibility since we added a layer
+      updateClearPanelVisibility();
+      
       print('✅ GeoJSON загружен! Нажмите "Submit changes" для обработки.');
     } else {
       // Parsing returned null - reset to default mode
@@ -1157,6 +1231,7 @@ controlPanel.add(infoElements);
 controlPanel.add(settingsElements);
 controlPanel.add(controlElements);
 controlPanel.add(drawingControlPanel);
+controlPanel.add(clearAreaPanel);
 
 map.add(controlPanel);
 map.add(panel);
@@ -1185,28 +1260,31 @@ regionMethodSelect.onChange(function(method) {
     // Show drawing tools
     drawingTools.setShown(true);
     drawingControlPanel.style().set('shown', true);
+    clearAreaPanel.style().set('shown', false);
     instr.setValue('Draw a region on the map');
     // Hide chip width slider (not used in graphical mode)
     regionWidthPanel.style().set('shown', false);
     // Disable map click handler temporarily
     map.unlisten('click');
   } else {
+    // Mode "По клику"
     // Hide drawing tools
     drawingTools.setShown(false);
     drawingControlPanel.style().set('shown', false);
-    // Remove drawing tool layers WITHOUT calling clear() to keep handler alive
+    // Remove only drawing tool layers (keep map layers)
     var layers = drawingTools.layers();
     while (layers.length() > 0) {
       layers.remove(layers.get(0));
     }
     DRAWN_GEOMETRY = null;
-    CLICKED = false; // Reset CLICKED flag to prevent Submit button from showing
     instr.setValue('Click on a location');
     // Show chip width slider (used in click mode)
     regionWidthPanel.style().set('shown', true);
     // Re-enable map click handler
     map.onClick(handleMapClick);
     submitButton.style().set('shown', false);
+    // Show clear panel if there are layers on the map
+    updateClearPanelVisibility();
   }
   optionChange();
 });
