@@ -194,15 +194,168 @@ var cloudSlider = ui.Slider({
 var cloudPanel = ui.Panel(
   [cloudLabel, cloudSlider], null, {stretch: 'horizontal'});
 
-// Region buffer.
+// Region buffer with settings.
 var regionWidthLabel = ui.Label(
   {value: 'Image chip width (km)', style: headerFont});
+
+// Default slider parameters
+var sliderParams = {
+  min: 10,
+  max: 160,
+  step: 10
+};
+
 var regionWidthSlider = ui.Slider({
-  min: 10, max: 160 , value: parseInt(ui.url.get('chipwidth')),
-  step: 10, style: {stretch: 'horizontal'}
+  min: sliderParams.min, 
+  max: sliderParams.max, 
+  value: parseInt(ui.url.get('chipwidth')),
+  step: sliderParams.step, 
+  style: {stretch: 'horizontal'}
 });
+
+// Settings panel for slider parameters (initially hidden)
+var sliderSettingsVisible = false;
+
+var sliderMinInput = ui.Textbox({
+  placeholder: 'Min',
+  value: String(sliderParams.min),
+  style: {width: '60px'}
+});
+
+var sliderMaxInput = ui.Textbox({
+  placeholder: 'Max',
+  value: String(sliderParams.max),
+  style: {width: '60px'}
+});
+
+var sliderStepInput = ui.Textbox({
+  placeholder: 'Step',
+  value: String(sliderParams.step),
+  style: {width: '60px'}
+});
+
+var applySliderSettingsButton = ui.Button({
+  label: 'Применить',
+  style: {fontSize: '10px'},
+  onClick: function() {
+    try {
+      var newMin = parseFloat(sliderMinInput.getValue());
+      var newMax = parseFloat(sliderMaxInput.getValue());
+      var newStep = parseFloat(sliderStepInput.getValue());
+      
+      // Validation
+      if (isNaN(newMin) || isNaN(newMax) || isNaN(newStep)) {
+        print('❌ Ошибка: все значения должны быть числами');
+        return;
+      }
+      
+      if (newMin >= newMax) {
+        print('❌ Ошибка: min должен быть меньше max');
+        return;
+      }
+      
+      if (newStep <= 0) {
+        print('❌ Ошибка: step должен быть больше 0');
+        return;
+      }
+      
+      // Update parameters
+      sliderParams.min = newMin;
+      sliderParams.max = newMax;
+      sliderParams.step = newStep;
+      
+      // Adjust current value to fit new range
+      var currentValue = regionWidthSlider.getValue();
+      var newValue = currentValue;
+      if (newValue < newMin) newValue = newMin;
+      if (newValue > newMax) newValue = newMax;
+      
+      // Recreate slider with new parameters
+      regionWidthSlider = ui.Slider({
+        min: newMin,
+        max: newMax,
+        value: newValue,
+        step: newStep,
+        style: {stretch: 'horizontal'}
+      });
+      
+      // Re-attach onChange handler
+      regionWidthSlider.onChange(optionChange);
+      
+      // Replace slider in control panel (keeping the settings button)
+      regionWidthControlPanel.widgets().set(0, regionWidthSlider);
+      
+      // Hide settings panel
+      sliderSettingsPanel.style().set('shown', false);
+      sliderSettingsVisible = false;
+      
+      print('✅ Параметры обновлены: min=' + newMin + ', max=' + newMax + ', step=' + newStep);
+      
+    } catch (e) {
+      print('❌ Ошибка настройки: ' + e.message);
+    }
+  }
+});
+
+// First row: Min and Max
+var sliderSettingsRow1 = ui.Panel({
+  widgets: [
+    ui.Label('Min:', {fontSize: '10px'}),
+    sliderMinInput,
+    ui.Label('Max:', {fontSize: '10px', margin: '0px 0px 0px 5px'}),
+    sliderMaxInput
+  ],
+  layout: ui.Panel.Layout.flow('horizontal')
+});
+
+// Second row: Step and Apply button
+var sliderSettingsRow2 = ui.Panel({
+  widgets: [
+    ui.Label('Step:', {fontSize: '10px'}),
+    sliderStepInput,
+    applySliderSettingsButton
+  ],
+  layout: ui.Panel.Layout.flow('horizontal')
+});
+
+var sliderSettingsPanel = ui.Panel({
+  widgets: [sliderSettingsRow1, sliderSettingsRow2],
+  layout: ui.Panel.Layout.flow('vertical'),
+  style: {
+    shown: false,
+    margin: '0px 0px 0px 8px'
+  }
+});
+
+// Settings button
+var regionWidthSettingsButton = ui.Button({
+  label: '⚙️',
+  style: {
+    width: '50px',
+    padding: '0px'
+  },
+  onClick: function() {
+    sliderSettingsVisible = !sliderSettingsVisible;
+    sliderSettingsPanel.style().set('shown', sliderSettingsVisible);
+    
+    // Update input values to current parameters
+    sliderMinInput.setValue(String(sliderParams.min));
+    sliderMaxInput.setValue(String(sliderParams.max));
+    sliderStepInput.setValue(String(sliderParams.step));
+  }
+});
+
+var regionWidthControlPanel = ui.Panel({
+  widgets: [regionWidthSlider, regionWidthSettingsButton],
+  layout: ui.Panel.Layout.flow('horizontal'),
+  style: {stretch: 'horizontal'}
+});
+
 var regionWidthPanel = ui.Panel(
-  [regionWidthLabel, regionWidthSlider], null, {stretch: 'horizontal'});
+  [regionWidthLabel, regionWidthControlPanel, sliderSettingsPanel], 
+  null, 
+  {stretch: 'horizontal'}
+);
 
 // Region selection method.
 var regionMethodLabel = ui.Label(
