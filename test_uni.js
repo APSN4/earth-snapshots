@@ -1147,8 +1147,8 @@ controlElements.add(sensorPanel);
 controlElements.add(rgbPanel);
 controlElements.add(durationPanel);
 controlElements.add(cloudPanel);
-controlElements.add(regionWidthPanel);
 controlElements.add(regionMethodPanel);
+controlElements.add(regionWidthPanel);
 controlElements.add(submitButton);
 
 controlPanel.add(instr);
