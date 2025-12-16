@@ -1048,7 +1048,8 @@ function renderGraphics(coords) {
     var aoiSquareCollection = ee.FeatureCollection([ee.Feature(aoiSquare)]);
     map.addLayer(ee.Image().byte().paint({featureCollection: aoiSquareCollection, width: 2}), 
                  {palette: [colorOptions[chipBorderColorSelect.getValue()]]}, 'Image chip area (square)');
-    map.centerObject(aoiSquare, 14);
+    // Auto-fit zoom to the square boundary
+    map.centerObject(aoiSquare);
   } else {
     // In click mode: show the point circle
     map.addLayer(aoiCircle, {color: colorOptions[pointCircleColorSelect.getValue()]}, 'Point Circle');
@@ -1056,7 +1057,8 @@ function renderGraphics(coords) {
     var aoiSquareCollection = ee.FeatureCollection([ee.Feature(aoiSquare)]);
     map.addLayer(ee.Image().byte().paint({featureCollection: aoiSquareCollection, width: 2}), 
                  {palette: [colorOptions[chipBorderColorSelect.getValue()]]}, 'Image chip area (square)');
-    map.centerObject(aoiCircle, 14);
+    // Auto-fit zoom to the square boundary
+    map.centerObject(aoiSquare);
   }
 
   // Update clear panel visibility since we added layers to the map
@@ -1398,7 +1400,8 @@ function addNewObjectFrom4Coords() {
     var geomCollection = ee.FeatureCollection([ee.Feature(geometry)]);
     map.addLayer(ee.Image().byte().paint({featureCollection: geomCollection, width: 3}), 
                  {palette: ['yellow']}, 'Loaded from 4 coords');
-    map.centerObject(geometry, 14);
+    // Auto-fit zoom to the geometry boundary
+    map.centerObject(geometry);
     
     // Update clear panel visibility since we added a layer
     updateClearPanelVisibility();
@@ -1450,7 +1453,8 @@ function addNewObjectGeoJson() {
       var geomCollection = ee.FeatureCollection([ee.Feature(geometry)]);
       map.addLayer(ee.Image().byte().paint({featureCollection: geomCollection, width: 3}), 
                    {palette: ['yellow']}, 'Loaded GeoJSON');
-      map.centerObject(geometry, 14);
+      // Auto-fit zoom to the geometry boundary
+      map.centerObject(geometry);
       
       // Update clear panel visibility since we added a layer
       updateClearPanelVisibility();
