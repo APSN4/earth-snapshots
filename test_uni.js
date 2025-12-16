@@ -191,8 +191,47 @@ var cloudSlider = ui.Slider({
   min: 0, max: 100 , value: parseInt(ui.url.get('cloud')),
   step: 1, style: {stretch: 'horizontal'}
 });
+
+// Cloud filtering method (hidden by default).
+var cloudMethodLabel = ui.Label(
+  {value: 'Cloud filter method', style: headerFont});
+var cloudMethodList = [
+  'Cloud Score Plus (cs)', 
+  'CLOUD_COVERAGE_ASSESSMENT', 
+  'No filter'
+];
+var cloudMethodSelect = ui.Select({
+  items: cloudMethodList, 
+  value: 'CLOUD_COVERAGE_ASSESSMENT',
+  style: {stretch: 'horizontal'}
+});
+var cloudMethodPanel = ui.Panel(
+  [cloudMethodLabel, cloudMethodSelect], null, 
+  {stretch: 'horizontal', shown: false});
+
+// Cloud settings button (next to slider)
+var cloudSettingsVisible = false;
+var cloudSettingsButton = ui.Button({
+  label: '⚙️',
+  style: {
+    width: '80px',
+    padding: '0px',
+    margin: '0px 0px 0px 0px'
+  },
+  onClick: function() {
+    cloudSettingsVisible = !cloudSettingsVisible;
+    cloudMethodPanel.style().set('shown', cloudSettingsVisible);
+  }
+});
+
+var cloudSliderRow = ui.Panel({
+  widgets: [cloudSlider, cloudSettingsButton],
+  layout: ui.Panel.Layout.flow('horizontal'),
+  style: {stretch: 'horizontal'}
+});
+
 var cloudPanel = ui.Panel(
-  [cloudLabel, cloudSlider], null, {stretch: 'horizontal'});
+  [cloudLabel, cloudSliderRow, cloudMethodPanel], null, {stretch: 'horizontal'});
 
 // Region buffer with settings.
 var regionWidthLabel = ui.Label(
@@ -788,14 +827,71 @@ function getLandsatCollection(aoi, startDate, endDate, cloudthresh, id) {
 
 /**
  * Join S2 SR and S2 cloudless.
+ * cloudMethod: 'Cloud Score Plus (cs)', 'CLOUD_COVERAGE_ASSESSMENT', 'No filter'
  */
-function getS2SrCldCol(aoi, startDate, endDate, cloudthresh, id) {
+function getS2SrCldCol(aoi, startDate, endDate, cloudthresh, id, cloudMethod) {
     var date_start = ee.Date(startDate);
     var date_end   = ee.Date(endDate);
     
     var nDays = date_end.difference(date_start, 'days');
     var dayOffsets = ee.List.sequence(0, nDays.subtract(1));
     
+    // Method 1: CLOUD_COVERAGE_ASSESSMENT - use metadata filter
+    if (cloudMethod === 'CLOUD_COVERAGE_ASSESSMENT') {
+      var s2SrCol = ee.ImageCollection(dayOffsets
+        .map(function (dayOffset) {
+          var dayStart = date_start.advance(dayOffset, 'days');
+          var dayFinish = dayStart.advance(1, 'days');
+          var composite = ee.ImageCollection(id)
+            .filterBounds(aoi)
+            .filterDate(dayStart, dayFinish)
+            .filterMetadata('CLOUD_COVERAGE_ASSESSMENT', 'less_than', cloudthresh)
+            .linkCollection(ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED'), ['cs'])
+            .map(function(img) {return img.updateMask(img.select('cs').gte(0.7));})
+            .median();
+          return composite
+            .set('empty', composite.bandNames().size().eq(0))
+            .set('system:time_start', dayStart.millis())
+            .set('date', dayStart.format('YYYY-MM-dd'));
+        }))
+        .filterMetadata('empty', 'equals', 0)
+        .sort('system:time_start');
+      return s2SrCol;
+    }
+    
+    // Method 2: Cloud Score Plus (cs) - calculate cloudiness via map
+    if (cloudMethod === 'Cloud Score Plus (cs)') {
+      var s2SrCol = ee.ImageCollection(dayOffsets
+        .map(function (dayOffset) {
+          var dayStart = date_start.advance(dayOffset, 'days');
+          var dayFinish = dayStart.advance(1, 'days');
+          var composite = ee.ImageCollection(id)
+            .filterBounds(aoi)
+            .filterDate(dayStart, dayFinish)
+            .linkCollection(ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED'), ['cs'])
+            .median();
+          return composite
+            .set('empty', composite.bandNames().size().eq(0))
+            .set('system:time_start', dayStart.millis())
+            .set('date', dayStart.format('YYYY-MM-dd'));
+        }))
+        .filterMetadata('empty', 'equals', 0)
+        .sort('system:time_start')
+        .map(function (image) {
+            var qa = image.select('cs');
+            var mask = qa.lte(0.5);
+            var cloudiness = mask.reduceRegion({
+              reducer: 'mean', 
+              geometry: aoi, 
+              scale: 30,
+              maxPixels:1e12
+            });
+        return image.set(cloudiness);})
+        .filter(ee.Filter.lt('cs', ee.Number(cloudthresh).divide(100)));
+      return s2SrCol;
+    }
+    
+    // Method 3: No filter - just get images without cloud filtering
     var s2SrCol = ee.ImageCollection(dayOffsets
       .map(function (dayOffset) {
         var dayStart = date_start.advance(dayOffset, 'days');
@@ -811,18 +907,7 @@ function getS2SrCldCol(aoi, startDate, endDate, cloudthresh, id) {
           .set('date', dayStart.format('YYYY-MM-dd'));
       }))
       .filterMetadata('empty', 'equals', 0)
-      .sort('system:time_start')
-      .map(function (image) {
-          var qa = image.select('cs');
-          var mask = qa.lte(0.5);
-          var cloudiness = mask.reduceRegion({
-            reducer: 'mean', 
-            geometry: aoi, 
-            scale: 30,
-            maxPixels:1e12
-          });
-      return image.set(cloudiness);})
-      .filter(ee.Filter.lt('cs', ee.Number(cloudthresh).divide(100)));
+      .sort('system:time_start');
 
   return s2SrCol;
 }
@@ -987,8 +1072,9 @@ function renderGraphics(coords) {
   print(startDate, endDate);
   // Build the collection.
   var col;
+  var cloudMethod = cloudMethodSelect.getValue();
   if(sensor == 'Sentinel-2 SR' | sensor == 'Sentinel-2 TOA') {
-    col = getS2SrCldCol(aoiSquare, startDate, endDate, cloudThresh, datasetId);
+    col = getS2SrCldCol(aoiSquare, startDate, endDate, cloudThresh, datasetId, cloudMethod);
   } else if(sensor == 'Landsat-8/9 SR' | sensor == 'Landsat-8/9 TOA') {
     col = getLandsatCollection(aoiSquare, startDate, endDate, cloudThresh, datasetId);
   }
