@@ -533,10 +533,6 @@ var clearDrawingButton = ui.Button({
 // Drawing tools control panel (shown in "Графически" mode)
 var drawingControlPanel = ui.Panel({
   widgets: [
-    ui.Label('🎨 Графический выбор области', {fontWeight: 'bold', fontSize: '14px'}),
-    ui.Label('1. Выберите инструмент рисования', {fontSize: '11px'}),
-    ui.Label('2. Нарисуйте область на карте', {fontSize: '11px'}),
-    ui.Label('3. Нажмите "Submit changes"', {fontSize: '11px'}),
     clearDrawingButton
   ],
   style: {
@@ -557,10 +553,6 @@ var clearAreaButton = ui.Button({
 // Clear area panel (shown in "По клику" mode when there are layers)
 var clearAreaPanel = ui.Panel({
   widgets: [
-    ui.Label('🎨 Графический выбор области', {fontWeight: 'bold', fontSize: '14px'}),
-    ui.Label('1. Выберите инструмент рисования', {fontSize: '11px'}),
-    ui.Label('2. Нарисуйте область на карте', {fontSize: '11px'}),
-    ui.Label('3. Нажмите "Submit changes"', {fontSize: '11px'}),
     clearAreaButton
   ],
   style: {
