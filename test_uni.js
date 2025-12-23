@@ -489,7 +489,7 @@ function updateClearPanelVisibility() {
 var clearDrawingButton = ui.Button({
   label: '🗑️ Очистить',
   onClick: clearAllAreas,
-  style: {backgroundColor: '#ff6b6b', color: 'black', fontSize: '11px'}
+  style: {backgroundColor: 'black', color: 'black', fontSize: '11px'}
 });
 
 // Drawing tools control panel (shown in "Графически" mode)
@@ -509,7 +509,7 @@ var drawingControlPanel = ui.Panel({
 var clearAreaButton = ui.Button({
   label: '🗑️ Очистить',
   onClick: clearAllAreas,
-  style: {backgroundColor: '#ff6b6b', color: 'white', fontSize: '11px'}
+  style: {backgroundColor: 'black', color: 'black', fontSize: '11px'}
 });
 
 // Clear area panel (shown in "По клику" mode when there are layers)
@@ -1620,7 +1620,6 @@ controlElements.add(regionMethodPanel);
 controlElements.add(subjectPanel);
 controlElements.add(createSeparator());
 controlElements.add(regionWidthPanel);
-controlElements.add(createSeparator());
 controlElements.add(submitButton);
 
 controlPanel.add(instr);
