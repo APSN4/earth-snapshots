@@ -345,7 +345,7 @@ var regionWidthPanel = ui.Panel(
 // Region selection method.
 var regionMethodLabel = ui.Label(
   {value: 'Способ выбора области', style: headerFont});
-var regionMethodList = ['По клику', 'Графически', 'GeoJSON', '4 координаты', 'Выберите субъект'];
+var regionMethodList = ['По клику', 'Графически', 'GeoJSON', '2 координаты', 'Выберите субъект'];
 var regionMethodSelect = ui.Select({
   items: regionMethodList, 
   value: 'По клику', 
@@ -1306,9 +1306,9 @@ function applySubjectSelection(subjectName) {
   updateClearPanelVisibility();
 }
 
-// Функция для создания полигона из 4 координат
+// Функция для создания полигона из 2 координат
 function addNewObjectFrom4Coords() {
-  var coordPrompt = prompt('Введите 4 координаты (lon1,lat1,lon2,lat2,lon3,lat3,lon4,lat4):', '80.95168200,53.49430700,83.04978700,54.73861000,83.04978700,53.49430700,80.95168200,54.73861000');
+  var coordPrompt = prompt('Введите 2 координаты (lon1,lat1,lon2,lat2):', '80.95168200,54.73861000,83.04978700,53.49430700');
   if (!coordPrompt) {
     // User cancelled - reset to default mode
     regionMethodSelect.setValue('По клику', false);
@@ -1319,9 +1319,9 @@ function addNewObjectFrom4Coords() {
     // Parse coordinates
     var coords = coordPrompt.split(',').map(function(x) { return parseFloat(x.trim()); });
     
-    // Check if we have exactly 8 numbers (4 points x 2 coordinates)
-    if (coords.length !== 8) {
-      print('❌ Ошибка: необходимо ввести ровно 8 чисел (4 точки по 2 координаты)');
+    // Check if we have exactly 4 numbers (2 points x 2 coordinates)
+    if (coords.length !== 4) {
+      print('❌ Ошибка: необходимо ввести ровно 4 числа (2 точки по 2 координаты)');
       regionMethodSelect.setValue('По клику', false);
       return;
     }
@@ -1335,19 +1335,17 @@ function addNewObjectFrom4Coords() {
       }
     }
     
-    // Extract 4 points
+    // Extract 2 points (top-left and bottom-right)
     var points = [
       {lon: coords[0], lat: coords[1]},
-      {lon: coords[2], lat: coords[3]},
-      {lon: coords[4], lat: coords[5]},
-      {lon: coords[6], lat: coords[7]}
+      {lon: coords[2], lat: coords[3]}
     ];
     
     // Find bounding box
-    var minLon = Math.min(points[0].lon, points[1].lon, points[2].lon, points[3].lon);
-    var maxLon = Math.max(points[0].lon, points[1].lon, points[2].lon, points[3].lon);
-    var minLat = Math.min(points[0].lat, points[1].lat, points[2].lat, points[3].lat);
-    var maxLat = Math.max(points[0].lat, points[1].lat, points[2].lat, points[3].lat);
+    var minLon = Math.min(points[0].lon, points[1].lon);
+    var maxLon = Math.max(points[0].lon, points[1].lon);
+    var minLat = Math.min(points[0].lat, points[1].lat);
+    var maxLat = Math.max(points[0].lat, points[1].lat);
     
     // Create rectangle in clockwise order (looking from above):
     // top-left -> top-right -> bottom-right -> bottom-left -> back to top-left
@@ -1395,7 +1393,7 @@ function addNewObjectFrom4Coords() {
     // Update clear panel visibility since we added a layer
     updateClearPanelVisibility();
     
-    print('✅ Полигон из 4 координат создан! Нажмите "Submit changes" для обработки.');
+    print('✅ Полигон из 2 координат создан! Нажмите "Submit changes" для обработки.');
   } catch (e) {
     print('❌ Ошибка создания полигона: ' + e.message);
     // Reset to default mode on error
@@ -1589,7 +1587,7 @@ regionMethodSelect.onChange(function(method) {
     addNewObjectGeoJson();
     // After dialog, the function will set the mode to 'Графически' if successful
     return;
-  } else if (method === '4 координаты') {
+  } else if (method === '2 координаты') {
     subjectPanel.style().set('shown', false);
     // Open 4 coordinates dialog
     addNewObjectFrom4Coords();
