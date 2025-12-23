@@ -192,7 +192,7 @@ var cloudSlider = ui.Slider({
   step: 1, style: {stretch: 'horizontal'}
 });
 
-// Cloud filtering method (hidden by default).
+// Cloud filtering method (moved to Settings).
 var cloudMethodLabel = ui.Label(
   {value: 'Cloud filter method', style: headerFont});
 var cloudMethodList = [
@@ -207,31 +207,10 @@ var cloudMethodSelect = ui.Select({
 });
 var cloudMethodPanel = ui.Panel(
   [cloudMethodLabel, cloudMethodSelect], null, 
-  {stretch: 'horizontal', shown: false});
-
-// Cloud settings button (next to slider)
-var cloudSettingsVisible = false;
-var cloudSettingsButton = ui.Button({
-  label: '⚙️',
-  style: {
-    width: '80px',
-    padding: '0px',
-    margin: '0px 0px 0px 0px'
-  },
-  onClick: function() {
-    cloudSettingsVisible = !cloudSettingsVisible;
-    cloudMethodPanel.style().set('shown', cloudSettingsVisible);
-  }
-});
-
-var cloudSliderRow = ui.Panel({
-  widgets: [cloudSlider, cloudSettingsButton],
-  layout: ui.Panel.Layout.flow('horizontal'),
-  style: {stretch: 'horizontal'}
-});
+  {stretch: 'horizontal'});
 
 var cloudPanel = ui.Panel(
-  [cloudLabel, cloudSliderRow, cloudMethodPanel], null, {stretch: 'horizontal'});
+  [cloudLabel, cloudSlider], null, {stretch: 'horizontal'});
 
 // Region buffer with settings.
 var regionWidthLabel = ui.Label(
@@ -252,25 +231,23 @@ var regionWidthSlider = ui.Slider({
   style: {stretch: 'horizontal'}
 });
 
-// Settings panel for slider parameters (initially hidden)
-var sliderSettingsVisible = false;
-
+// Settings panel for slider parameters (moved to Settings)
 var sliderMinInput = ui.Textbox({
   placeholder: 'Min',
   value: String(sliderParams.min),
-  style: {width: '60px'}
+  style: {width: '40px'}
 });
 
 var sliderMaxInput = ui.Textbox({
   placeholder: 'Max',
   value: String(sliderParams.max),
-  style: {width: '60px'}
+  style: {width: '40px'}
 });
 
 var sliderStepInput = ui.Textbox({
   placeholder: 'Step',
   value: String(sliderParams.step),
-  style: {width: '60px'}
+  style: {width: '40px'}
 });
 
 var applySliderSettingsButton = ui.Button({
@@ -321,12 +298,8 @@ var applySliderSettingsButton = ui.Button({
       // Re-attach onChange handler
       regionWidthSlider.onChange(optionChange);
       
-      // Replace slider in control panel (keeping the settings button)
-      regionWidthControlPanel.widgets().set(0, regionWidthSlider);
-      
-      // Hide settings panel
-      sliderSettingsPanel.style().set('shown', false);
-      sliderSettingsVisible = false;
+      // Replace slider in control panel
+      regionWidthPanel.widgets().set(1, regionWidthSlider);
       
       print('✅ Параметры обновлены: min=' + newMin + ', max=' + newMax + ', step=' + newStep);
       
@@ -336,24 +309,22 @@ var applySliderSettingsButton = ui.Button({
   }
 });
 
-// First row: Min and Max
+// First row: Min, Max, Step
 var sliderSettingsRow1 = ui.Panel({
   widgets: [
-    ui.Label('Min:', {fontSize: '10px'}),
+    ui.Label('Min:', {fontSize: '10px', margin: '0px 0px 0px 5px'}),
     sliderMinInput,
     ui.Label('Max:', {fontSize: '10px', margin: '0px 0px 0px 5px'}),
-    sliderMaxInput
+    sliderMaxInput,
+    ui.Label('Step:', {fontSize: '10px', margin: '0px 0px 0px 5px'}),
+    sliderStepInput
   ],
   layout: ui.Panel.Layout.flow('horizontal')
 });
 
-// Second row: Step and Apply button
+// Second row: Apply button
 var sliderSettingsRow2 = ui.Panel({
-  widgets: [
-    ui.Label('Step:', {fontSize: '10px'}),
-    sliderStepInput,
-    applySliderSettingsButton
-  ],
+  widgets: [applySliderSettingsButton],
   layout: ui.Panel.Layout.flow('horizontal')
 });
 
@@ -361,38 +332,12 @@ var sliderSettingsPanel = ui.Panel({
   widgets: [sliderSettingsRow1, sliderSettingsRow2],
   layout: ui.Panel.Layout.flow('vertical'),
   style: {
-    shown: false,
     margin: '0px 0px 0px 8px'
   }
 });
 
-// Settings button
-var regionWidthSettingsButton = ui.Button({
-  label: '⚙️',
-  style: {
-    width: '80px',
-    padding: '0px',
-    margin: '0px 0px 0px 0px'
-  },
-  onClick: function() {
-    sliderSettingsVisible = !sliderSettingsVisible;
-    sliderSettingsPanel.style().set('shown', sliderSettingsVisible);
-    
-    // Update input values to current parameters
-    sliderMinInput.setValue(String(sliderParams.min));
-    sliderMaxInput.setValue(String(sliderParams.max));
-    sliderStepInput.setValue(String(sliderParams.step));
-  }
-});
-
-var regionWidthControlPanel = ui.Panel({
-  widgets: [regionWidthSlider, regionWidthSettingsButton],
-  layout: ui.Panel.Layout.flow('horizontal'),
-  style: {stretch: 'horizontal'}
-});
-
 var regionWidthPanel = ui.Panel(
-  [regionWidthLabel, regionWidthControlPanel, sliderSettingsPanel], 
+  [regionWidthLabel, regionWidthSlider], 
   null, 
   {stretch: 'horizontal'}
 );
@@ -1532,6 +1477,10 @@ var pointCircleColorSelect = ui.Select({
 });
 var pointCircleColorPanel = ui.Panel([pointCircleColorLabel, pointCircleColorSelect], null, {stretch: 'horizontal'});
 
+// Image chip width settings (moved from Options)
+var chipWidthSettingsLabel = ui.Label({value: 'Image chip width settings', style: headerFont});
+var chipWidthSettingsPanel = ui.Panel([chipWidthSettingsLabel, sliderSettingsPanel], null, {stretch: 'horizontal'});
+
 settingsElements.add(settingsLabel);
 settingsElements.add(settingsDescLabel);
 settingsElements.add(autoLoadPanel);
@@ -1539,6 +1488,8 @@ settingsElements.add(thumbnailSizePanel);
 settingsElements.add(aoiBorderColorPanel);
 settingsElements.add(chipBorderColorPanel);
 settingsElements.add(pointCircleColorPanel);
+settingsElements.add(cloudMethodPanel);
+settingsElements.add(chipWidthSettingsPanel);
 
 controlElements.add(optionsLabel);
 controlElements.add(sensorPanel);
