@@ -345,7 +345,7 @@ var regionWidthPanel = ui.Panel(
 // Region selection method.
 var regionMethodLabel = ui.Label(
   {value: 'Способ выбора области', style: headerFont});
-var regionMethodList = ['По клику', 'Графически', 'GeoJSON', '4 координаты', 'Выбор субъекта'];
+var regionMethodList = ['По клику', 'Графически', 'GeoJSON', '4 координаты', 'Выберите субъект'];
 var regionMethodSelect = ui.Select({
   items: regionMethodList, 
   value: 'По клику', 
@@ -970,7 +970,7 @@ function renderGraphics(coords) {
   var aoiCircle, aoiBox, aoiSquare;
   var useDrawnGeometry = (
     (regionMethodSelect.getValue() === 'Графически' ||
-     regionMethodSelect.getValue() === 'Выбор субъекта') &&
+     regionMethodSelect.getValue() === 'Выберите субъект') &&
     DRAWN_GEOMETRY !== null
   );
   
@@ -1064,7 +1064,7 @@ function handleMapClick(coords) {
  */
 function handleSubmitClick() {
   var currentMethod = regionMethodSelect.getValue();
-  if (currentMethod === 'Графически' || currentMethod === 'Выбор субъекта') {
+  if (currentMethod === 'Графически' || currentMethod === 'Выберите субъект') {
     // Check if DRAWN_GEOMETRY is already set (from GeoJSON or 4 coords)
     if (DRAWN_GEOMETRY !== null) {
       // Use the already set geometry
@@ -1595,7 +1595,7 @@ regionMethodSelect.onChange(function(method) {
     addNewObjectFrom4Coords();
     // After dialog, the function will set the mode to 'Графически' if successful
     return;
-  } else if (method === 'Выбор субъекта') {
+  } else if (method === 'Выберите субъект') {
     // Show subject selector
     drawingTools.setShown(false);
     drawingControlPanel.style().set('shown', false);
