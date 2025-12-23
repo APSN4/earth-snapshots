@@ -345,7 +345,7 @@ var regionWidthPanel = ui.Panel(
 // Region selection method.
 var regionMethodLabel = ui.Label(
   {value: 'Способ выбора области', style: headerFont});
-var regionMethodList = ['По клику', 'Графически', 'GeoJSON', '4 координаты'];
+var regionMethodList = ['По клику', 'Графически', 'GeoJSON', '4 координаты', 'Выбор субъекта'];
 var regionMethodSelect = ui.Select({
   items: regionMethodList, 
   value: 'По клику', 
@@ -353,6 +353,21 @@ var regionMethodSelect = ui.Select({
 });
 var regionMethodPanel = ui.Panel(
   [regionMethodLabel, regionMethodSelect], null, {stretch: 'horizontal'});
+
+// Region subject selection.
+var subjectLabel = ui.Label({value: 'Выберите субъект', style: headerFont});
+var subjectSelect = ui.Select({
+  items: [],
+  placeholder: 'Выберите субъект',
+  style: {stretch: 'horizontal'}
+});
+var subjectPanel = ui.Panel(
+  [subjectLabel, subjectSelect], null, {stretch: 'horizontal', shown: false});
+
+var subjectNames = ee.List(table2.aggregate_array('locname')).distinct().sort();
+subjectNames.evaluate(function(list) {
+  subjectSelect.items().reset(list);
+});
 
 // A message to wait for image chips to load.
 var waitMsgImgPanel = ui.Label({
@@ -427,7 +442,8 @@ function clearAllAreas() {
   map.layers().forEach(function(layer) {
     var name = layer.getName();
     if (name === 'Drawn area' || name === 'Image chip area (square)' || 
-        name === 'Point Circle' || name === 'Loaded GeoJSON' || name === 'Loaded from 4 coords') {
+        name === 'Point Circle' || name === 'Loaded GeoJSON' || 
+        name === 'Loaded from 4 coords' || name === 'Выбранный субъект') {
       layersToRemove.push(layer);
     }
   });
@@ -451,7 +467,8 @@ function hasMapLayers() {
   map.layers().forEach(function(layer) {
     var name = layer.getName();
     if (name === 'Drawn area' || name === 'Image chip area (square)' || 
-        name === 'Point Circle' || name === 'Loaded GeoJSON' || name === 'Loaded from 4 coords') {
+        name === 'Point Circle' || name === 'Loaded GeoJSON' || 
+        name === 'Loaded from 4 coords' || name === 'Выбранный субъект') {
       hasLayers = true;
     }
   });
@@ -951,7 +968,11 @@ function renderGraphics(coords) {
   
   // Determine if using drawn geometry or clicked point
   var aoiCircle, aoiBox, aoiSquare;
-  var useDrawnGeometry = (regionMethodSelect.getValue() === 'Графически' && DRAWN_GEOMETRY !== null);
+  var useDrawnGeometry = (
+    (regionMethodSelect.getValue() === 'Графически' ||
+     regionMethodSelect.getValue() === 'Выбор субъекта') &&
+    DRAWN_GEOMETRY !== null
+  );
   
   if (useDrawnGeometry) {
     // Use drawn geometry
@@ -1042,7 +1063,8 @@ function handleMapClick(coords) {
  * Handles submit button click.
  */
 function handleSubmitClick() {
-  if (regionMethodSelect.getValue() === 'Графически') {
+  var currentMethod = regionMethodSelect.getValue();
+  if (currentMethod === 'Графически' || currentMethod === 'Выбор субъекта') {
     // Check if DRAWN_GEOMETRY is already set (from GeoJSON or 4 coords)
     if (DRAWN_GEOMETRY !== null) {
       // Use the already set geometry
@@ -1050,7 +1072,9 @@ function handleSubmitClick() {
       centroid.evaluate(function(coords) {
         COORDS = coords;
         renderGraphics(COORDS);
-        DRAWN_GEOMETRY = null;
+        if (currentMethod === 'Графически') {
+          DRAWN_GEOMETRY = null;
+        }
       });
     } else {
       // Get all drawn geometries from drawing tools layers
@@ -1255,6 +1279,33 @@ function geoJsonParser(jsonText) {
   }
 }
 
+function applySubjectSelection(subjectName) {
+  if (!subjectName) {
+    return;
+  }
+
+  var subjectFc = table2.filter(ee.Filter.eq('locname', subjectName));
+  var subjectGeom = subjectFc.geometry();
+
+  DRAWN_GEOMETRY = subjectGeom;
+  CLICKED = true;
+  submitButton.style().set('shown', true);
+
+  map.layers().forEach(function(el) {
+    map.layers().remove(el);
+  });
+
+  var subjectCollection = ee.FeatureCollection([ee.Feature(subjectGeom)]);
+  map.addLayer(
+    ee.Image().byte().paint({featureCollection: subjectCollection, width: 3}),
+    {palette: [colorOptions[aoiBorderColorSelect.getValue()]]},
+    'Выбранный субъект'
+  );
+  map.centerObject(subjectGeom);
+
+  updateClearPanelVisibility();
+}
+
 // Функция для создания полигона из 4 координат
 function addNewObjectFrom4Coords() {
   var coordPrompt = prompt('Введите 4 координаты (lon1,lat1,lon2,lat2,lon3,lat3,lon4,lat4):', '80.95168200,53.49430700,83.04978700,54.73861000,83.04978700,53.49430700,80.95168200,54.73861000');
@@ -1325,6 +1376,7 @@ function addNewObjectFrom4Coords() {
     
     // Hide chip width slider (not used in graphical mode)
     regionWidthPanel.style().set('shown', false);
+    subjectPanel.style().set('shown', false);
     
     // Show the submit button
     submitButton.style().set('shown', true);
@@ -1378,6 +1430,7 @@ function addNewObjectGeoJson() {
       
       // Hide chip width slider (not used in graphical mode)
       regionWidthPanel.style().set('shown', false);
+      subjectPanel.style().set('shown', false);
       
       // Show the submit button
       submitButton.style().set('shown', true);
@@ -1497,6 +1550,7 @@ controlElements.add(rgbPanel);
 controlElements.add(durationPanel);
 controlElements.add(cloudPanel);
 controlElements.add(regionMethodPanel);
+controlElements.add(subjectPanel);
 controlElements.add(regionWidthPanel);
 controlElements.add(submitButton);
 
@@ -1521,21 +1575,38 @@ txtbox2.onChange(optionChange);
 
 cloudSlider.onChange(optionChange);
 regionWidthSlider.onChange(optionChange);
+subjectSelect.onChange(function(value) {
+  applySubjectSelection(value);
+});
 submitButton.onClick(handleSubmitClick);
 map.onClick(handleMapClick);
 
 // Handler for region method selection
 regionMethodSelect.onChange(function(method) {
   if (method === 'GeoJSON') {
+    subjectPanel.style().set('shown', false);
     // Open GeoJSON dialog
     addNewObjectGeoJson();
     // After dialog, the function will set the mode to 'Графически' if successful
     return;
   } else if (method === '4 координаты') {
+    subjectPanel.style().set('shown', false);
     // Open 4 coordinates dialog
     addNewObjectFrom4Coords();
     // After dialog, the function will set the mode to 'Графически' if successful
     return;
+  } else if (method === 'Выбор субъекта') {
+    // Show subject selector
+    drawingTools.setShown(false);
+    drawingControlPanel.style().set('shown', false);
+    clearAreaPanel.style().set('shown', false);
+    instr.setValue('Выберите субъект');
+    // Hide chip width slider (not used in subject mode)
+    regionWidthPanel.style().set('shown', false);
+    subjectPanel.style().set('shown', true);
+    // Disable map click handler temporarily
+    map.unlisten('click');
+    submitButton.style().set('shown', false);
   } else if (method === 'Графически') {
     // Show drawing tools
     drawingTools.setShown(true);
@@ -1544,6 +1615,7 @@ regionMethodSelect.onChange(function(method) {
     instr.setValue('Draw a region on the map');
     // Hide chip width slider (not used in graphical mode)
     regionWidthPanel.style().set('shown', false);
+    subjectPanel.style().set('shown', false);
     // Disable map click handler temporarily
     map.unlisten('click');
   } else {
@@ -1560,6 +1632,7 @@ regionMethodSelect.onChange(function(method) {
     instr.setValue('Click on a location');
     // Show chip width slider (used in click mode)
     regionWidthPanel.style().set('shown', true);
+    subjectPanel.style().set('shown', false);
     // Re-enable map click handler
     map.onClick(handleMapClick);
     submitButton.style().set('shown', false);
