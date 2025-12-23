@@ -754,17 +754,19 @@ function addDate(img) {
 /**
  * Gathers all Landsat into a collection.
  */
-function getLandsatCollection(aoi, startDate, endDate, cloudthresh, id) {
+function getLandsatCollection(aoi, startDate, endDate, cloudthresh, id, startDay, endDay) {
   var id8 = id;
   var id9 = id.replace('LC08', 'LC09');
   
   var oli8Col = ee.ImageCollection(id8)
     .filterBounds(aoi)
     .filterDate(startDate, endDate)
+    .filter(ee.Filter.dayOfYear(startDay, endDay))
     .filter(ee.Filter.lt('CLOUD_COVER', cloudthresh));
   var oli9Col = ee.ImageCollection(id9)
     .filterBounds(aoi)
     .filterDate(startDate, endDate)
+    .filter(ee.Filter.dayOfYear(startDay, endDay))
     .filter(ee.Filter.lt('CLOUD_COVER', cloudthresh));
   var oliCol = oli8Col.merge(oli9Col).sort('system:time_start');
 
@@ -783,7 +785,7 @@ function getLandsatCollection(aoi, startDate, endDate, cloudthresh, id) {
  * Join S2 SR and S2 cloudless.
  * cloudMethod: 'Cloud Score Plus (cs)', 'CLOUD_COVERAGE_ASSESSMENT', 'No filter'
  */
-function getS2SrCldCol(aoi, startDate, endDate, cloudthresh, id, cloudMethod) {
+function getS2SrCldCol(aoi, startDate, endDate, cloudthresh, id, cloudMethod, startDay, endDay) {
     var date_start = ee.Date(startDate);
     var date_end   = ee.Date(endDate);
     
@@ -799,6 +801,7 @@ function getS2SrCldCol(aoi, startDate, endDate, cloudthresh, id, cloudMethod) {
           var composite = ee.ImageCollection(id)
             .filterBounds(aoi)
             .filterDate(dayStart, dayFinish)
+            .filter(ee.Filter.dayOfYear(startDay, endDay))
             .filterMetadata('CLOUD_COVERAGE_ASSESSMENT', 'less_than', cloudthresh)
             .linkCollection(ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED'), ['cs'])
             .map(function(img) {return img.updateMask(img.select('cs').gte(0.7));})
@@ -822,6 +825,7 @@ function getS2SrCldCol(aoi, startDate, endDate, cloudthresh, id, cloudMethod) {
           var composite = ee.ImageCollection(id)
             .filterBounds(aoi)
             .filterDate(dayStart, dayFinish)
+            .filter(ee.Filter.dayOfYear(startDay, endDay))
             .linkCollection(ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED'), ['cs'])
             .median();
           return composite
@@ -853,6 +857,7 @@ function getS2SrCldCol(aoi, startDate, endDate, cloudthresh, id, cloudMethod) {
         var composite = ee.ImageCollection(id)
           .filterBounds(aoi)
           .filterDate(dayStart, dayFinish)
+          .filter(ee.Filter.dayOfYear(startDay, endDay))
           .linkCollection(ee.ImageCollection('GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED'), ['cs'])
           .median();
         return composite
@@ -1029,14 +1034,23 @@ function renderGraphics(coords) {
 
   var startDate = durationPanel.widgets().get(1).getValue();
   var endDate = durationPanel.widgets().get(2).getValue();
+  
+  // Get Day of Year filter params
+  var startDay = parseInt(doyStartInput.getValue());
+  var endDay = parseInt(doyEndInput.getValue());
+  
+  // Basic validation (fallback to defaults if invalid)
+  if (isNaN(startDay)) startDay = 1;
+  if (isNaN(endDay)) endDay = 367;
+  
   print(startDate, endDate);
   // Build the collection.
   var col;
   var cloudMethod = cloudMethodSelect.getValue();
   if(sensor == 'Sentinel-2 SR' | sensor == 'Sentinel-2 TOA') {
-    col = getS2SrCldCol(aoiSquare, startDate, endDate, cloudThresh, datasetId, cloudMethod);
+    col = getS2SrCldCol(aoiSquare, startDate, endDate, cloudThresh, datasetId, cloudMethod, startDay, endDay);
   } else if(sensor == 'Landsat-8/9 SR' | sensor == 'Landsat-8/9 TOA') {
-    col = getLandsatCollection(aoiSquare, startDate, endDate, cloudThresh, datasetId);
+    col = getLandsatCollection(aoiSquare, startDate, endDate, cloudThresh, datasetId, startDay, endDay);
   }
 
   col = ee.ImageCollection(col.distinct('date')).sort('system:time_start');
@@ -1535,6 +1549,30 @@ var pointCircleColorPanel = ui.Panel([pointCircleColorLabel, pointCircleColorSel
 var chipWidthSettingsLabel = ui.Label({value: 'Image chip width settings', style: headerFont});
 var chipWidthSettingsPanel = ui.Panel([chipWidthSettingsLabel, sliderSettingsPanel], null, {stretch: 'horizontal'});
 
+// Day of Year filter settings
+var doyLabel = ui.Label({value: 'Day of Year Filter (1-366)', style: headerFont});
+var doyStartInput = ui.Textbox({
+  placeholder: 'Start',
+  value: '1',
+  style: {width: '60px'}
+});
+var doyEndInput = ui.Textbox({
+  placeholder: 'End',
+  value: '367',
+  style: {width: '60px'}
+});
+var doyPanel = ui.Panel({
+  widgets: [
+    ui.Label('Start Day:', {fontSize: '12px', margin: '8px 4px 0px 4px'}),
+    doyStartInput,
+    ui.Label('End Day:', {fontSize: '12px', margin: '8px 4px 0px 10px'}),
+    doyEndInput
+  ],
+  layout: ui.Panel.Layout.flow('horizontal'),
+  style: {stretch: 'horizontal'}
+});
+var doySettingsPanel = ui.Panel([doyLabel, doyPanel], null, {stretch: 'horizontal'});
+
 settingsElements.add(settingsLabel);
 settingsElements.add(settingsDescLabel);
 settingsElements.add(autoLoadPanel);
@@ -1544,6 +1582,7 @@ settingsElements.add(chipBorderColorPanel);
 settingsElements.add(pointCircleColorPanel);
 settingsElements.add(cloudMethodPanel);
 settingsElements.add(chipWidthSettingsPanel);
+settingsElements.add(doySettingsPanel);
 
 controlElements.add(optionsLabel);
 controlElements.add(sensorPanel);
