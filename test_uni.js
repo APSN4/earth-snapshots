@@ -1478,22 +1478,6 @@ var settingsDescLabel = ui.Label(
   'Configure application preferences and display settings.',
   infoFont);
 
-var themeLabel = ui.Label({value: 'UI Theme', style: headerFont});
-var themeSelect = ui.Select({
-  items: ['Light', 'Dark', 'Auto'],
-  value: 'Light',
-  style: {stretch: 'horizontal'}
-});
-var themePanel = ui.Panel([themeLabel, themeSelect], null, {stretch: 'horizontal'});
-
-var languageLabel = ui.Label({value: 'Language', style: headerFont});
-var languageSelect = ui.Select({
-  items: ['English', 'Русский'],
-  value: 'Русский',
-  style: {stretch: 'horizontal'}
-});
-var languagePanel = ui.Panel([languageLabel, languageSelect], null, {stretch: 'horizontal'});
-
 var autoLoadLabel = ui.Label({value: 'Auto-load imagery', style: headerFont});
 var autoLoadCheckbox = ui.Checkbox({
   label: 'Automatically load images on selection',
@@ -1550,8 +1534,6 @@ var pointCircleColorPanel = ui.Panel([pointCircleColorLabel, pointCircleColorSel
 
 settingsElements.add(settingsLabel);
 settingsElements.add(settingsDescLabel);
-settingsElements.add(themePanel);
-settingsElements.add(languagePanel);
 settingsElements.add(autoLoadPanel);
 settingsElements.add(thumbnailSizePanel);
 settingsElements.add(aoiBorderColorPanel);
