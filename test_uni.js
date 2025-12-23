@@ -677,6 +677,20 @@ var sensorInfo = {
 // #############################################################################
 
 /**
+ * Creates a visual separator line.
+ */
+function createSeparator() {
+  return ui.Panel({
+    style: {
+      height: '1px',
+      backgroundColor: '#e0e0e0',
+      margin: '8px 8px 8px 8px',
+      stretch: 'horizontal'
+    }
+  });
+}
+
+/**
  * Creates a minimal bounding square that fully contains the geometry.
  */
 function createMinimalBoundingSquare(geometry) {
@@ -1575,23 +1589,38 @@ var doySettingsPanel = ui.Panel([doyLabel, doyPanel], null, {stretch: 'horizonta
 
 settingsElements.add(settingsLabel);
 settingsElements.add(settingsDescLabel);
+settingsElements.add(createSeparator());
 settingsElements.add(autoLoadPanel);
+settingsElements.add(createSeparator());
 settingsElements.add(thumbnailSizePanel);
+settingsElements.add(createSeparator());
 settingsElements.add(aoiBorderColorPanel);
+settingsElements.add(createSeparator());
 settingsElements.add(chipBorderColorPanel);
+settingsElements.add(createSeparator());
 settingsElements.add(pointCircleColorPanel);
+settingsElements.add(createSeparator());
 settingsElements.add(cloudMethodPanel);
+settingsElements.add(createSeparator());
 settingsElements.add(chipWidthSettingsPanel);
+settingsElements.add(createSeparator());
 settingsElements.add(doySettingsPanel);
 
 controlElements.add(optionsLabel);
+controlElements.add(createSeparator());
 controlElements.add(sensorPanel);
+controlElements.add(createSeparator());
 controlElements.add(rgbPanel);
+controlElements.add(createSeparator());
 controlElements.add(durationPanel);
+controlElements.add(createSeparator());
 controlElements.add(cloudPanel);
+controlElements.add(createSeparator());
 controlElements.add(regionMethodPanel);
 controlElements.add(subjectPanel);
+controlElements.add(createSeparator());
 controlElements.add(regionWidthPanel);
+controlElements.add(createSeparator());
 controlElements.add(submitButton);
 
 controlPanel.add(instr);
