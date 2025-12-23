@@ -1062,21 +1062,11 @@ function handleMapClick(coords) {
 /**
  * Handles submit button click.
  */
-function handleSubmitClick() {
-  var currentMethod = regionMethodSelect.getValue();
-  if (currentMethod === 'Графически' || currentMethod === 'Выберите субъект') {
-    // Check if DRAWN_GEOMETRY is already set (from GeoJSON or 4 coords)
-    if (DRAWN_GEOMETRY !== null) {
-      // Use the already set geometry
-      var centroid = DRAWN_GEOMETRY.centroid().coordinates();
-      centroid.evaluate(function(coords) {
-        COORDS = coords;
-        renderGraphics(COORDS);
-        if (currentMethod === 'Графически') {
-          DRAWN_GEOMETRY = null;
-        }
-      });
-    } else {
+  function handleSubmitClick() {
+    var currentMethod = regionMethodSelect.getValue();
+    
+    // Logic for Graphic mode - ALWAYS gather all layers from map
+    if (currentMethod === 'Графически') {
       // Get all drawn geometries from drawing tools layers
       var layers = drawingTools.layers();
       if (layers.length() > 0) {
@@ -1084,8 +1074,6 @@ function handleSubmitClick() {
         var geometries = [];
         for (var i = 0; i < layers.length(); i++) {
           var layer = layers.get(i);
-          // Check if layer has geometries() method (multiple features)
-          // If not, use toGeometry() for single geometry
           try {
             var layerGeometries = layer.geometries();
             if (layerGeometries) {
@@ -1094,42 +1082,57 @@ function handleSubmitClick() {
               }
             }
           } catch(e) {
-            // If geometries() doesn't exist, fall back to toGeometry()
             geometries.push(layer.toGeometry());
           }
         }
         
-        // If only one geometry, use it directly
-        // If multiple geometries, create a union or bounding geometry
+        // Create final geometry from all shapes
         var finalGeometry;
         if (geometries.length === 1) {
           finalGeometry = geometries[0];
+          print('✅ Обработана 1 область');
         } else {
-          // Create a union of all geometries (combines them into one)
+          // Combine multiple geometries
           finalGeometry = ee.Algorithms.GeometryConstructors.MultiPolygon(geometries).dissolve();
+          print('✅ Объединено ' + geometries.length + ' областей');
         }
         
+        // Update DRAWN_GEOMETRY to include ALL shapes
         DRAWN_GEOMETRY = finalGeometry;
         
-        // Use centroid of final geometry as coords for compatibility
         var centroid = finalGeometry.centroid().coordinates();
         centroid.evaluate(function(coords) {
           COORDS = coords;
           renderGraphics(COORDS);
-          // Remove drawing tool layers WITHOUT calling clear() to keep handler alive
+          
+          // Clear interactive drawing layers (static yellow layer will remain)
           var layers = drawingTools.layers();
           while (layers.length() > 0) {
             layers.remove(layers.get(0));
           }
+          
+          // We can reset DRAWN_GEOMETRY now as renderGraphics has already used it
           DRAWN_GEOMETRY = null;
         });
       }
+    } 
+    // Logic for other modes (GeoJSON, Coords, Subject) - use pre-set DRAWN_GEOMETRY
+    else if ((currentMethod === 'GeoJSON' || currentMethod === '2 координаты' || currentMethod === 'Выберите субъект') && DRAWN_GEOMETRY !== null) {
+      var centroid = DRAWN_GEOMETRY.centroid().coordinates();
+      centroid.evaluate(function(coords) {
+        COORDS = coords;
+        renderGraphics(COORDS);
+        // Do NOT nullify DRAWN_GEOMETRY here if we want to keep it valid for these modes
+        // or handle via updateClearPanelVisibility
+      });
     }
-  } else if (COORDS !== null) {
-    renderGraphics(COORDS);
+    // Logic for Click mode
+    else if (COORDS !== null) {
+      renderGraphics(COORDS);
+    }
+    
+    submitButton.style().set('shown', false);
   }
-  submitButton.style().set('shown', false);
-}
 
 /**
  * Sets URL params.
