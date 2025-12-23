@@ -489,7 +489,7 @@ function updateClearPanelVisibility() {
 var clearDrawingButton = ui.Button({
   label: '🗑️ Очистить',
   onClick: clearAllAreas,
-  style: {backgroundColor: '#ff6b6b', color: 'white', fontSize: '11px'}
+  style: {backgroundColor: '#ff6b6b', color: 'black', fontSize: '11px'}
 });
 
 // Drawing tools control panel (shown in "Графически" mode)
